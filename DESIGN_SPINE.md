@@ -100,14 +100,9 @@ A first escort, provisional name **ISV Indomitable**, can protect logistics rout
 
 ## Research
 
-Research is a strategic investment, not an instant unlock. The Asterion Collegium generates research progress over time. Later, research consumes specialized people, power, advanced components, and facilities.
+Research is a strategic investment, not an instant unlock. The Asterion Collegium generates research progress over time from staffed labs, offers a rotating weighted selection of live research options rather than one fixed tree, and allows gambling banked research points on an early breakthrough at real risk.
 
-First candidate technologies:
-
-- Improved refinery efficiency
-- Expanded freighter cargo capacity
-- Better fuel efficiency
-- Basic supply depot storage
+This is now fully designed and implemented as the project's canonical research system — see `docs/systems/research.md` for the full design, `src/research/` for the code, and `src/research/data/technologies.json` for the starter set of 16 technologies across four lanes (Physics & Materials, Logistics & Industry, Biology & Colonization, Military Doctrine). It is not yet wired into `src/main.py`'s command loop; that integration is future lesson work, per the milestone order in `README.md`.
 
 ## Salvage
 
