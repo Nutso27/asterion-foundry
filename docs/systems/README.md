@@ -10,16 +10,16 @@ This directory contains short design notes. Documentation is where large ideas l
 | Earth and Mars stockpiles | Implemented | `src/main.py` |
 | Mars forge-world production | Implemented, minimal | `src/main.py` |
 | Command loop | Implemented | `src/main.py` |
-| Research (Asterion Collegium) | Implemented, standalone module — not yet wired into the command loop | `src/research/`, see `research.md` |
+| Freight logistics (CSV Meridian) | Implemented — automatic Earth↔Mars cargo loop | `src/main.py` |
+| Research (Asterion Collegium) | Implemented and wired into the command loop (`research`/`invest`/`pilot`) | `src/research/`, `src/main.py`, see `research.md` |
 
 ## Planned next
 
 | System | First small goal |
 |---|---|
-| Freight logistics | Add CSV Meridian and a single cargo order |
 | Alerts | Report low supplies and stalled production clearly |
-| Research → main loop | Wire `src/research/` into `src/main.py`'s `status`/`advance` commands |
 | Pauseable real time | Replace manual-only advancement after manual steps are stable |
+| Research economy | Let the player build a second lab or hire/train scientists |
 
 ## Future design notes
 

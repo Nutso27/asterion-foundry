@@ -1,6 +1,6 @@
 # Research System — The Asterion Collegium
 
-**Status:** Implemented (standalone module, not yet wired into `src/main.py`'s command loop)
+**Status:** Implemented and wired into `src/main.py`'s command loop (`research`, `invest`, `pilot` commands)
 **Code:** `src/research/`
 **Data:** `src/research/data/technologies.json`
 **Tests:** `tests/test_research.py`
@@ -102,24 +102,43 @@ empty effect fails the test suite.
   pool, no pilot projects). This is exactly what `demo.py` exercises
   before adding the other layers.
 
+## Command-loop integration (Lesson 03)
+
+`src/main.py` builds one starting `ResearchState` (`build_research_state`):
+one lab on Mars ("Mars Collegium Laboratory") staffed by one scientist
+("Savant Voss", specialized in Physics & Materials), with every lane's
+discovery pool rolled once at startup. Each `advance` step calls
+`update_research`, which runs `generate_rp` automatically — the same way
+Mars's forge complex runs automatically. Spending RP is always a
+deliberate player choice:
+
+- `research` — prints banked RP per lane, each lane's active pool with
+  progress and effects, and completed technologies.
+- `invest <lane_id> <pool position>` — spends everything currently
+  banked in that lane into the chosen pool entry; completing a node
+  applies its effect and reopens a pool slot.
+- `pilot <lane_id> <pool position>` — attempts a pilot-project trial on
+  that pool entry via the Mars Collegium Laboratory (only works on
+  `pilot_project_enabled` nodes).
+
 ## What this version explicitly does not include
 
-- No integration into `src/main.py`'s command loop yet — per this
-  project's own lesson order (freight logistics comes before research in
-  `README.md`'s "Immediate milestones"), that wiring is future work.
 - No scientist hiring/training economy (scientists are created directly
   for now; a recruitment/training system is a natural follow-up).
-- No UI beyond `demo.py`'s printed walkthrough.
+- No UI beyond the terminal `research`/`invest`/`pilot` commands and
+  `demo.py`'s printed walkthrough.
 - No balancing pass — `base_output_per_cycle` in `engine.generate_rp` and
-  the RP costs in `technologies.json` are placeholder numbers meant to be
-  tuned once this is wired into the real simulation loop.
+  the RP costs in `technologies.json` are placeholder numbers, tunable
+  once real playtesting against the freight loop happens.
+- Only one lab and one scientist exist at game start; building/hiring
+  more is future work, not part of this integration.
 
 ## Success condition
 
-`python -m unittest tests/test_research.py -v` passes, and
-`python src/research/demo.py` runs end to end: it generates RP from a
-staffed lab, rolls a discovery pool per lane, completes at least one node
-through steady investment, and resolves one pilot-project trial.
+`python -m unittest tests/test_research.py -v` passes, `python src/research/demo.py`
+runs end to end, and `python src/main.py` lets a player run `advance` to
+accumulate RP, `research` to see the discovery pool, `invest` to complete
+a node through steady accumulation, and `pilot` to gamble on one.
 
 ## Dependencies
 

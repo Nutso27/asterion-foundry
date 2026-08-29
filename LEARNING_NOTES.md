@@ -29,6 +29,45 @@ _Write this in your own words._
 _Write this in your own words._
 
 
+## Lesson 02 — CSV Meridian Freight Logistics
+
+### What does the freighter's `status` field do?
+
+_Write this in your own words._
+
+
+### Why does the freighter load an empty cargo sometimes?
+
+_Write this in your own words._
+
+
+### What is one number I changed and what happened?
+
+_Write this in your own words._
+
+
+## Lesson 03 — Asterion Collegium Research
+
+### What is the difference between the RP stockpile and the discovery pool?
+
+_Write this in your own words._
+
+
+### Why is investing RP a command instead of automatic?
+
+_Write this in your own words._
+
+
+### What happened the first time I tried a pilot project?
+
+_Write this in your own words._
+
+
+### What is one number I changed and what happened?
+
+_Write this in your own words._
+
+
 ## Vocabulary
 
 | Word | My explanation |
