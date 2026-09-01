@@ -23,13 +23,13 @@ The initial prototype is a small Python terminal simulation. It is intentionally
 
 ## Current playable lesson
 
-`src/main.py` contains Lesson 01: a tiny two-world industrial simulation.
+`src/main.py` now contains Lessons 01 through 03: a two-world industrial simulation, freight logistics, and Collegium research.
 
 - Earth begins with essential support supplies.
-- Mars consumes support supplies to operate its forge complexes.
-- Mars produces raw metal and refines a portion into refined metal.
-- The player types commands such as `status`, `advance`, `help`, and `quit`.
-- Mars eventually runs out of supplies. This is intentional: Lesson 02 will add the freighter **CSV Meridian** to establish the first logistics loop.
+- Mars consumes support supplies to operate its forge complexes, and produces raw metal and refines a portion into refined metal.
+- The freighter **CSV Meridian** automatically ferries support supplies from Earth to Mars, and refined metal back from Mars to Earth, so Mars no longer stalls on its own.
+- The **Asterion Collegium** runs a small research lab on Mars. Research points accumulate automatically each step; spending them on a technology, or gambling on an early breakthrough with a pilot project, is a deliberate player choice (see `docs/systems/research.md`).
+- The player types commands such as `status`, `advance`, `research`, `invest <lane> <pos>`, `pilot <lane> <pos>`, `help`, and `quit`.
 
 ## Run the project
 
@@ -82,7 +82,8 @@ asterion-foundry/
 │   ├── START_HERE.md         # First-session guide
 │   └── systems/              # Design notes for game systems
 ├── src/
-│   └── main.py               # Lesson 01 runnable simulation
+│   ├── main.py               # Lessons 01-03 runnable simulation (forge, freight, research)
+│   └── research/             # Asterion Collegium research engine, data, and demo
 └── .gitignore                # Files Git should not track
 ```
 
@@ -115,13 +116,13 @@ For each feature:
 
 ## Immediate milestones
 
-1. Run the manual Sol–Mars industrial simulation.
-2. Understand dictionaries, functions, conditions, and the command loop.
-3. Add the **CSV Meridian** freighter.
-4. Make it load support supplies on Earth, travel, and unload them at Mars.
-5. Return Martian industrial output to Earth orbit.
-6. Add basic research from the Mars-based technical institution.
-7. Convert manual steps into pausable real time.
+1. Run the manual Sol–Mars industrial simulation. — done
+2. Understand dictionaries, functions, conditions, and the command loop. — done
+3. Add the **CSV Meridian** freighter. — done
+4. Make it load support supplies on Earth, travel, and unload them at Mars. — done
+5. Return Martian industrial output to Earth orbit. — done
+6. Add basic research from the Mars-based technical institution. — done
+7. Convert manual steps into pausable real time. — next
 
 ## Long-term systems
 
