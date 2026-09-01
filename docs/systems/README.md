@@ -12,6 +12,10 @@ This directory contains short design notes. Documentation is where large ideas l
 | Command loop | Implemented | `src/main.py` |
 | Freight logistics (CSV Meridian) | Implemented — automatic Earth↔Mars cargo loop | `src/main.py` |
 | Research (Asterion Collegium) | Implemented and wired into the command loop (`research`/`invest`/`pilot`) | `src/research/`, `src/main.py`, see `research.md` |
+| Directorate Penal Code | Implemented (standalone module, not yet wired into `main.py`) | `src/penal_code.py`, see `penal-code.md` |
+| Lab specialization (fixed vs. flexible labs) | Implemented (standalone module, not yet wired into `main.py`) | `src/research/lab_specialization.py`, see `lab-specialization.md` |
+| Shipyard slot expansion and no-idle rotation | Implemented (standalone module, not yet wired into `main.py`) | `src/shipyard.py`, see `shipyard.md` |
+| Ship design (MK progression and retirement) | Implemented (standalone module, not yet wired into `main.py`) | `src/ship_design.py`, see `ship-design.md` |
 
 ## Planned next
 
@@ -26,6 +30,10 @@ This directory contains short design notes. Documentation is where large ideas l
 | System | Document |
 |---|---|
 | Research | `research.md` |
+| Directorate Penal Code | `penal-code.md` |
+| Lab specialization | `lab-specialization.md` |
+| Shipyard slot expansion | `shipyard.md` |
+| Ship design (MK progression) | `ship-design.md` |
 | Salvage | `salvage.md` |
 | Hive cities, nomadic fleets, Dyson projects | `megastructures.md` |
 
