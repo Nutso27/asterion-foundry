@@ -1,6 +1,6 @@
 # Lab Specialization — Fixed Programs vs. Flexible Research
 
-**Status:** Documented and implemented (first version) — `src/research/lab_specialization.py`.
+**Status:** Documented, implemented, and wired into the game loop — `src/research/lab_specialization.py` (data module) plus `src/main.py` (integration).
 
 ## Purpose
 
@@ -39,12 +39,44 @@ has a hard, sane limit rather than approaching zero or infinity.
 
 ## What this version explicitly does not include yet
 
-- No lab construction cost/queue integration with `src/shipyard.py` or a
-  matching "build a lab" flow in `main.py`.
 - No scientist staffing model for the fixed-role labs — they are assumed to
   run with a caretaker crew, not the individually-tracked `Scientist`
   objects used for Lab #1's flexible pool.
-- No UI/report line yet showing all seven-plus labs and their roles at once.
+
+## Integration into the game loop
+
+- `build_lab` **command** → `handle_build_lab()` in `src/main.py`: spends
+  `LAB_BUILD_COST` refined metal at Mars, creates a new `Lab` object,
+  computes its role with `default_lab_role(lab_number)` (the exact tested
+  function from `src/research/lab_specialization.py`), and registers it
+  in both `world["research"].labs` and `world["lab_roles"]`.
+- **Perpetual ticking**: `update_lab_specialization()` runs from
+  `advance_world()` every `advance` step, but only actually ticks every
+  `LAB_TICK_INTERVAL_STEPS` steps (`world["time"] % LAB_TICK_INTERVAL_STEPS == 0`).
+  On a tick, every lab in `world["lab_roles"]` whose role is a fixed
+  perpetual program calls `apply_perpetual_tick()` — the exact tested
+  function — on the matching entry in `world["multipliers"]`.
+- **What the multipliers actually do**, wired into the other systems:
+  - `construction_time_multiplier` scales `BASE_BUILD_TIME_STEPS` inside
+    `update_shipyard()` (see `docs/systems/shipyard.md`) — lower means
+    faster hulls.
+  - `research_time_multiplier` is used as the effective `dt` passed to
+    `generate_rp()` inside `update_research()` — lower means faster RP
+    accumulation.
+  - `universal_efficiency_multiplier` scales the 10-support-supply cost
+    inside `update_mars()` — lower means Mars's forge complex is cheaper
+    to run (down to a floor of 5 supplies/step, since the multiplier's
+    own floor is 0.5).
+
+## Where this lives in the code
+
+| What | Where |
+|---|---|
+| Each lab's permanent role | `world["lab_roles"]` in `src/main.py` (a dict of `lab_id -> role string`) |
+| The three running multipliers | `world["multipliers"]` in `src/main.py` |
+| Building a new lab | `build_lab` command → `handle_build_lab()` in `src/main.py` |
+| The per-interval tick logic | `update_lab_specialization()` in `src/main.py`, called from `advance_world()` |
+| Viewing labs, roles, and multipliers | `labs` command → `show_labs()` in `src/main.py` |
 
 ## Success condition
 
@@ -61,4 +93,21 @@ has a hard, sane limit rather than approaching zero or infinity.
 Builds on the existing research system (`src/research/`, see
 `docs/systems/research.md`). Does not require the shipyard or ship-design
 systems, but conceptually sits alongside them as one of the Directorate's
-standing background-improvement systems.
+standing background-improvement systems — its `construction_time_multiplier`
+feeds `docs/systems/shipyard.md` directly.
+
+## How to customize
+
+- **Change how much refined metal a new lab costs:** edit
+  `LAB_BUILD_COST` in `src/main.py`.
+- **Change how often perpetual programs tick, or by how much:** edit
+  `LAB_TICK_INTERVAL_STEPS` (steps between ticks) and
+  `LAB_TICK_MAGNITUDE` (how much a multiplier moves per tick) in
+  `src/main.py`.
+- **Change the hard floor every multiplier is capped at:** edit
+  `LAB_TICK_FLOOR` in `src/main.py`. Note this floor applies to all three
+  multipliers uniformly; give a system its own floor by adding a second
+  constant and passing it explicitly in `update_lab_specialization()`.
+- **Change which lab number gets which fixed role:** edit
+  `_FIXED_ROLE_BY_LAB_NUMBER` in `src/research/lab_specialization.py`
+  itself (the tested data module, not `main.py`).

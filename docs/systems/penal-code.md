@@ -1,6 +1,6 @@
 # Directorate Penal Code — Law and Sentencing
 
-**Status:** Documented and implemented (first version) — `src/penal_code.py`.
+**Status:** Documented, implemented, and wired into the game loop — `src/penal_code.py` (data module) plus `src/main.py` (integration).
 
 ## Purpose
 
@@ -35,10 +35,36 @@ Directorate acts, not whether the accused "did it."
 ## What this version explicitly does not include yet
 
 - No random trial/verdict resolution — `charge()` returns the article's typical sentence, it does not simulate a contested hearing.
-- No persistent case/prisoner records tied into `world` state in `main.py`.
 - No appeals process.
 - No tie-in yet to the labor economy (Toil/Penal Legion assignees are not
-  wired into `src/main.py`'s production numbers).
+  wired into `src/main.py`'s production numbers — a filed record does not
+  yet remove anyone from, or add anyone to, a workforce pool).
+
+## Integration into the game loop
+
+- `charge <name> <article_id>` **command** → `handle_charge()` in
+  `src/main.py`: looks up the article, calls the exact tested `charge()`
+  function from `src/penal_code.py`, and appends a record dict
+  (`name`, `article_id`, `tier`, `status`) to `world["penal_records"]`.
+  A capital (Servitor Conversion) sentence is filed with
+  `status: "awaiting_confirmation"` instead of being carried out
+  immediately.
+- `confirm_servitor <name> <vigil y/n> <grand_director y/n>` **command** →
+  `handle_confirm_servitor()`: finds that name's pending record and calls
+  the exact tested `confirm_capital_sentence()` function. On success the
+  record's `status` becomes `"carried_out"`; a missing sign-off raises
+  the same `ValueError` the standalone module always raised, reported to
+  the player instead of silently failing.
+
+## Where this lives in the code
+
+| What | Where |
+|---|---|
+| The standing Penal Code (doctrine + articles) | `world["penal_code"]` in `src/main.py`, built by `PenalCode.default_code()` |
+| Every charge ever filed | `world["penal_records"]` — a list of dicts, oldest first |
+| Filing a charge | `charge` command → `handle_charge()` in `src/main.py` |
+| Confirming/carrying out a capital sentence | `confirm_servitor` command → `handle_confirm_servitor()` in `src/main.py` |
+| Viewing articles + filed records | `docket` command → `show_docket()` in `src/main.py` |
 
 ## Success condition
 
@@ -51,6 +77,21 @@ Directorate acts, not whether the accused "did it."
 
 ## Dependencies
 
-None yet — this is a standalone module. Future integration point: a labor
+None yet beyond the game loop itself. Future integration point: a labor
 assignment system that actually consumes Toil/Penal Legion sentences as a
 workforce pool.
+
+## How to customize
+
+- **Add, remove, or rename an article, or change its typical sentence:**
+  edit `PenalCode.default_code()` in `src/penal_code.py` itself — this is
+  the single source of truth `world["penal_code"]` is built from at game
+  start.
+- **Add a new sentencing tier:** add a member to the `SentencingTier`
+  enum in `src/penal_code.py`; if it should be capital/irreversible like
+  Servitor Conversion, also add its own confirmation gate alongside
+  `confirm_capital_sentence()` rather than overloading that function.
+- **Change who names count as valid targets, or add a lookup by ship/
+  crew roster instead of free-typed names:** that validation would live
+  in `handle_charge()` in `src/main.py`; the data module itself has no
+  opinion on what a valid "name" is.

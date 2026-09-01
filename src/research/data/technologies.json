@@ -30,7 +30,9 @@
       "prerequisites": [],
       "rp_cost": 40,
       "draw_weight": 3.0,
-      "effect": {"refined_metal_yield_multiplier": 1.15},
+      "effect": {
+        "refined_metal_yield_multiplier": 1.15
+      },
       "flavor_text": "The Collegium's metallurgists formalize a slower but purer smelting rite, wringing more usable alloy from every load of ore."
     },
     {
@@ -38,10 +40,15 @@
       "name": "Stress Lattice Theory",
       "lane": "physics_and_materials",
       "tier": 2,
-      "prerequisites": ["pm_refined_alloy_process"],
+      "prerequisites": [
+        "pm_refined_alloy_process"
+      ],
       "rp_cost": 90,
       "draw_weight": 2.0,
-      "effect": {"hull_integrity_multiplier": 1.1, "unlocks_hull_class": "reinforced_hull_mk1"},
+      "effect": {
+        "hull_integrity_multiplier": 1.1,
+        "unlocks_hull_class": "reinforced_hull_mk1"
+      },
       "flavor_text": "A mathematical model of load-bearing lattices lets shipwrights reinforce a hull without adding dead weight."
     },
     {
@@ -49,12 +56,19 @@
       "name": "Focused Energy Emitters",
       "lane": "physics_and_materials",
       "tier": 2,
-      "prerequisites": ["pm_refined_alloy_process"],
+      "prerequisites": [
+        "pm_refined_alloy_process"
+      ],
       "rp_cost": 100,
       "draw_weight": 1.5,
-      "effect": {"unlocks_weapon": "focused_beam_battery", "weapon_accuracy_bonus": 0.1},
+      "effect": {
+        "unlocks_weapon": "focused_beam_battery",
+        "weapon_accuracy_bonus": 0.1
+      },
       "flavor_text": "Coherent-emission theory, if it can be tamed into a stable housing, promises weapons that do not miss.",
-      "mutually_exclusive_with": ["md_kinetic_mass_drivers"],
+      "mutually_exclusive_with": [
+        "md_kinetic_mass_drivers"
+      ],
       "pilot_project_enabled": true,
       "pilot_base_success_chance": 0.15,
       "pilot_partial_progress_pct": 0.3,
@@ -65,13 +79,17 @@
       "name": "Megastructure-Grade Materials",
       "lane": "physics_and_materials",
       "tier": 3,
-      "prerequisites": ["pm_stress_lattice_theory"],
+      "prerequisites": [
+        "pm_stress_lattice_theory"
+      ],
       "rp_cost": 220,
       "draw_weight": 0.8,
-      "effect": {"unlocks_construction_tier": "megastructure_grade_hull_segments"},
+      "effect": {
+        "unlocks_construction_tier": "megastructure_grade_hull_segments"
+      },
       "flavor_text": "A material standard rated for structures that will never fly \u2014 built instead to endure in place for centuries, a first requirement for hive and Dyson-scale work.",
       "pilot_project_enabled": true,
-      "pilot_base_success_chance": 0.10,
+      "pilot_base_success_chance": 0.1,
       "pilot_partial_progress_pct": 0.25,
       "pilot_funding_rp": 120
     },
@@ -83,7 +101,9 @@
       "prerequisites": [],
       "rp_cost": 35,
       "draw_weight": 3.0,
-      "effect": {"freighter_cargo_capacity_multiplier": 1.2},
+      "effect": {
+        "freighter_cargo_capacity_multiplier": 1.2
+      },
       "flavor_text": "Redesigned bracing frees hold volume aboard freighters like the CSV Meridian without touching hull dimensions."
     },
     {
@@ -94,7 +114,9 @@
       "prerequisites": [],
       "rp_cost": 45,
       "draw_weight": 3.0,
-      "effect": {"fuel_consumption_multiplier": 0.85},
+      "effect": {
+        "fuel_consumption_multiplier": 0.85
+      },
       "flavor_text": "Recovering waste heat and unburned reactant from drive exhaust stretches every tank of fuel further."
     },
     {
@@ -102,34 +124,55 @@
       "name": "Star-Lane Transit Doctrine",
       "lane": "logistics_and_industry",
       "tier": 2,
-      "prerequisites": ["li_fuel_reclamation_cycles"],
+      "prerequisites": [
+        "li_fuel_reclamation_cycles"
+      ],
       "rp_cost": 120,
       "draw_weight": 1.5,
-      "effect": {"star_lane_travel_time_multiplier": 0.75, "star_lane_fuel_multiplier": 0.9},
+      "effect": {
+        "star_lane_travel_time_multiplier": 0.75,
+        "star_lane_fuel_multiplier": 0.9
+      },
       "flavor_text": "The Collegium standardizes navigation along established corridors: slower to leave them, but far cheaper and safer while on them.",
-      "mutually_exclusive_with": ["li_open_space_drive_doctrine"]
+      "mutually_exclusive_with": [
+        "li_open_space_drive_doctrine"
+      ]
     },
     {
       "id": "li_open_space_drive_doctrine",
       "name": "Open-Space Drive Doctrine",
       "lane": "logistics_and_industry",
       "tier": 2,
-      "prerequisites": ["li_fuel_reclamation_cycles"],
+      "prerequisites": [
+        "li_fuel_reclamation_cycles"
+      ],
       "rp_cost": 120,
       "draw_weight": 1.5,
-      "effect": {"open_space_travel_time_multiplier": 0.8, "open_space_fuel_multiplier": 1.05, "scouting_range_bonus": 0.25},
+      "effect": {
+        "open_space_travel_time_multiplier": 0.8,
+        "open_space_fuel_multiplier": 1.05,
+        "scouting_range_bonus": 0.25
+      },
       "flavor_text": "An alternative doctrine that accepts higher fuel burn off the star-lanes in exchange for freedom of movement \u2014 scouting, interception, and reaching worlds no corridor touches.",
-      "mutually_exclusive_with": ["li_star_lane_transit_doctrine"]
+      "mutually_exclusive_with": [
+        "li_star_lane_transit_doctrine"
+      ]
     },
     {
       "id": "li_automated_forge_scheduling",
       "name": "Automated Forge Scheduling",
       "lane": "logistics_and_industry",
       "tier": 3,
-      "prerequisites": ["li_cargo_hold_optimization", "li_fuel_reclamation_cycles"],
+      "prerequisites": [
+        "li_cargo_hold_optimization",
+        "li_fuel_reclamation_cycles"
+      ],
       "rp_cost": 200,
       "draw_weight": 0.9,
-      "effect": {"mars_production_efficiency_multiplier": 1.2, "unlocks": "automation_policy_manufacturing"},
+      "effect": {
+        "mars_production_efficiency_multiplier": 1.2,
+        "unlocks": "automation_policy_manufacturing"
+      },
       "flavor_text": "A scheduling doctrine that lets Mars's forge complexes run automation policy on production queues, freeing overseers for exceptions rather than every order.",
       "pilot_project_enabled": true,
       "pilot_base_success_chance": 0.15,
@@ -144,7 +187,9 @@
       "prerequisites": [],
       "rp_cost": 50,
       "draw_weight": 3.0,
-      "effect": {"support_supply_consumption_multiplier": 0.85},
+      "effect": {
+        "support_supply_consumption_multiplier": 0.85
+      },
       "flavor_text": "Recycled air, water, and waste stretch every shipment of support supplies further before the next freighter is due."
     },
     {
@@ -155,7 +200,10 @@
       "prerequisites": [],
       "rp_cost": 40,
       "draw_weight": 3.0,
-      "effect": {"colony_survey_time_multiplier": 0.7, "unlocks": "rapid_outpost_survey"},
+      "effect": {
+        "colony_survey_time_multiplier": 0.7,
+        "unlocks": "rapid_outpost_survey"
+      },
       "flavor_text": "A fixed survey checklist replaces ad hoc scouting, cutting the time from arrival to a founded outpost."
     },
     {
@@ -163,10 +211,15 @@
       "name": "Modular Habitat Construction",
       "lane": "biology_and_colonization",
       "tier": 2,
-      "prerequisites": ["bc_closed_loop_life_support"],
+      "prerequisites": [
+        "bc_closed_loop_life_support"
+      ],
       "rp_cost": 110,
       "draw_weight": 1.5,
-      "effect": {"habitat_capacity_multiplier": 1.3, "unlocks_specialization": "expanded_colony_population_cap"},
+      "effect": {
+        "habitat_capacity_multiplier": 1.3,
+        "unlocks_specialization": "expanded_colony_population_cap"
+      },
       "flavor_text": "Prefabricated habitat sections snap together on-site, letting a colony's population cap grow without a full rebuild."
     },
     {
@@ -174,10 +227,15 @@
       "name": "Agroforge Cultivation Methods",
       "lane": "biology_and_colonization",
       "tier": 2,
-      "prerequisites": ["bc_survey_protocols"],
+      "prerequisites": [
+        "bc_survey_protocols"
+      ],
       "rp_cost": 100,
       "draw_weight": 1.5,
-      "effect": {"unlocks_world_specialization": "agri_world", "food_production_bonus": 1.0},
+      "effect": {
+        "unlocks_world_specialization": "agri_world",
+        "food_production_bonus": 1.0
+      },
       "flavor_text": "Controlled-environment cultivation domes make a surveyed world viable as a dedicated agri-world."
     },
     {
@@ -188,7 +246,10 @@
       "prerequisites": [],
       "rp_cost": 55,
       "draw_weight": 3.0,
-      "effect": {"unlocks_defense": "point_defense_grid", "incoming_fire_reduction": 0.1},
+      "effect": {
+        "unlocks_defense": "point_defense_grid",
+        "incoming_fire_reduction": 0.1
+      },
       "flavor_text": "Automated point-defense batteries intercept incoming fire before it reaches the hull."
     },
     {
@@ -196,22 +257,34 @@
       "name": "Kinetic Mass Drivers",
       "lane": "military_doctrine",
       "tier": 2,
-      "prerequisites": ["md_point_defense_grids"],
+      "prerequisites": [
+        "md_point_defense_grids"
+      ],
       "rp_cost": 130,
       "draw_weight": 1.5,
-      "effect": {"unlocks_weapon": "mass_driver_battery", "weapon_damage_bonus": 0.15},
+      "effect": {
+        "unlocks_weapon": "mass_driver_battery",
+        "weapon_damage_bonus": 0.15
+      },
       "flavor_text": "A brute-force doctrine: hurl mass at high velocity. Cheaper to build and maintain than a beam weapon, and just as final.",
-      "mutually_exclusive_with": ["pm_focused_energy_emitters"]
+      "mutually_exclusive_with": [
+        "pm_focused_energy_emitters"
+      ]
     },
     {
       "id": "md_salvage_field_recovery",
       "name": "Salvage Field Recovery Doctrine",
       "lane": "military_doctrine",
       "tier": 2,
-      "prerequisites": ["md_point_defense_grids"],
+      "prerequisites": [
+        "md_point_defense_grids"
+      ],
       "rp_cost": 90,
       "draw_weight": 1.6,
-      "effect": {"salvage_yield_multiplier": 1.25, "unlocks": "wreck_field_data_recovery"},
+      "effect": {
+        "salvage_yield_multiplier": 1.25,
+        "unlocks": "wreck_field_data_recovery"
+      },
       "flavor_text": "Standardized recovery procedure for wreck fields: what looked like scrap starts yielding intact components and data cores.",
       "pilot_project_enabled": true,
       "pilot_base_success_chance": 0.2,
@@ -223,11 +296,54 @@
       "name": "Escort Doctrine Hardening",
       "lane": "military_doctrine",
       "tier": 3,
-      "prerequisites": ["md_salvage_field_recovery"],
+      "prerequisites": [
+        "md_salvage_field_recovery"
+      ],
       "rp_cost": 180,
       "draw_weight": 0.9,
-      "effect": {"unlocks_ship_role": "dedicated_escort_configuration", "escort_fleet_protection_bonus": 0.2},
+      "effect": {
+        "unlocks_ship_role": "dedicated_escort_configuration",
+        "escort_fleet_protection_bonus": 0.2
+      },
       "flavor_text": "Lessons pulled from recovered wrecks harden the doctrine for the Directorate's first dedicated escort hulls."
+    },
+    {
+      "id": "li_freighter_mk2_hull_design",
+      "name": "Freighter Mark II Hull Design",
+      "lane": "logistics_and_industry",
+      "tier": 1,
+      "prerequisites": [],
+      "rp_cost": 130,
+      "draw_weight": 2.0,
+      "effect": {
+        "ship_design_mk_upgrade": "freighter",
+        "to_mk": "Mark II",
+        "freighter_cargo_capacity_multiplier": 1.25
+      },
+      "flavor_text": "A revised freighter hull pattern, superseding the CSV Meridian's Mark I baseline with a wider cargo frame and thicker plating.",
+      "pilot_project_enabled": true,
+      "pilot_base_success_chance": 0.2,
+      "pilot_partial_progress_pct": 0.3,
+      "pilot_funding_rp": 60.0
+    },
+    {
+      "id": "md_light_warship_mk2_hull_design",
+      "name": "Light Warship Mark II Hull Design",
+      "lane": "military_doctrine",
+      "tier": 1,
+      "prerequisites": [],
+      "rp_cost": 150,
+      "draw_weight": 2.0,
+      "effect": {
+        "ship_design_mk_upgrade": "light_warship",
+        "to_mk": "Mark II",
+        "light_warship_combat_rating_multiplier": 1.3
+      },
+      "flavor_text": "Reinforced weapon mounts and armor plating for the light warship line, superseding the Mark I baseline.",
+      "pilot_project_enabled": true,
+      "pilot_base_success_chance": 0.18,
+      "pilot_partial_progress_pct": 0.3,
+      "pilot_funding_rp": 70.0
     }
   ]
 }
