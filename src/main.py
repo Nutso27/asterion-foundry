@@ -106,19 +106,19 @@ LAB_TICK_FLOOR = 0.5
 # A dictionary is a labeled container for information.
 # `world` holds the entire current state of this tiny simulation.
 world = {
-    "time": 0,
+    "time": 29,
     "locations": {
         "earth": {
             "name": "Earth",
-            "support_supplies": 500,
+            "support_supplies": 13165.0,
             "raw_metal": 0,
             "refined_metal": 0,
         },
         "mars": {
             "name": "Mars",
-            "support_supplies": 100,
-            "raw_metal": 0,
-            "refined_metal": 0,
+            "support_supplies": 113.0,
+            "raw_metal": 225.0,
+            "refined_metal": 362.0,
         },
     },
     "ships": {
@@ -131,9 +131,30 @@ world = {
             "cargo_refined_metal": 0,
             "travel_remaining": 0,
             "class_id": "freighter",
+            "mk": "Mark I",    
+        },
+                "csv_concord": {
+            "name": "CSV Concord",
+            "status": "idle_at_mars",
+            "cargo_capacity": 200,
+            "cargo_support_supplies": 0,
+            "cargo_refined_metal": 0,
+            "travel_remaining": 0,
+            "class_id": "freighter",
             "mk": "Mark I",
         },
+        "lws_vigilant": {
+            "name": "LWS Vigilant",
+            "status": "escorting Earth-Mars corridor",
+            "class_id": "light_warship",
+            "mk": "Mark I",
+            "combat_rating": 40,
+        },
+        "pc_ward": {"name": "PC Ward", "status": "escorting Earth-Mars corridor"},
+        "pc_sentinel": {"name": "PC Sentinel", "status": "on alert, Earth orbit"},
+        "pc_bastion": {"name": "PC Bastion", "status": "on alert, Earth orbit"},
     },
+    "xenos_fragments": 3,
 }
 
 # Sequential hull numbers for ships the shipyard builds beyond the ones
@@ -186,10 +207,10 @@ def build_ship_and_facility_state():
     """
     world["ship_classes"] = {
         "freighter": ShipClass(
-            id="freighter", category="logistics", current_mk="Mark I", in_service=["CSV Meridian"]
+            id="freighter", category="logistics", current_mk="Mark I", in_service=["CSV Meridian", "CSV Concord"],
         ),
         "light_warship": ShipClass(
-            id="light_warship", category="warship", current_mk="Mark I", in_service=[]
+            id="light_warship", category="warship", current_mk="Mark I", in_service=["LWS Vigilant"],
         ),
     }
 
@@ -209,15 +230,34 @@ def build_ship_and_facility_state():
 
     # Lab #1 is always the flexible auto-research lab (see build_research_state).
     world["lab_roles"] = {"mars_collegium_lab": FLEXIBLE_AUTO_RESEARCH}
+    # Cycle-29 sync (Lesson 05): these three numbers aren't guesses — each
+    # one ticks via Collegium Lab #2/#3 (construction/research time, -2%
+    # every 5 cycles) or Lab #4-#6 (universal efficiency, +1% every 5
+    # cycles). Fresh game starts all three at 1.0 (no effect yet); by
+    # cycle 29 enough ticks have happened to reach these values.
     world["multipliers"] = {
-        "construction_time_multiplier": 1.0,
-        "research_time_multiplier": 1.0,
-        "universal_efficiency_multiplier": 1.0,
+        "construction_time_multiplier": 0.98,   # lower = faster builds
+        "research_time_multiplier": 0.98,       # lower = faster research
+        "universal_efficiency_multiplier": 1.01,    # higher = more output per cycle
     }
 
     world["penal_code"] = PenalCode.default_code()
     world["penal_records"] = []
-
+    # Cycle-29 sync (Lesson 05): the compendium says Labs #2-#6 are already
+    # built and operational; Lab #7 is still under construction, so it's
+    # deliberately NOT added here — build_lab (in-game command) adds it later.
+    # capacity=0 because these are "perpetual program" labs (see
+    # docs/systems/lab-specialization.md) — they don't hold researcher
+    # slots the way Lab #1 does, they just tick a multiplier on a timer.
+    for lab_number in range(2, 7):
+        role = default_lab_role(lab_number)
+        lab_id = f"collegium_lab_{lab_number:02d}"
+        lab = Lab(
+            id=lab_id, name=f"Collegium Laboratory {lab_number}",
+            location="mars", capacity=0, quality=0.5, specialties=[],
+        )
+        world["research"].add_lab(lab)
+        world["lab_roles"][lab_id] = role 
 
 def show_status():
     """Print the resource stockpiles for every current location, the
