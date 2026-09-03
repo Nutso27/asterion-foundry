@@ -244,6 +244,95 @@ def build_ship_and_facility_state():
 
     world["penal_code"] = PenalCode.default_code()
     world["penal_records"] = []
+
+        # Command Structure (Lesson 06). Council seats, Branches A-K with rank
+    # ladders, and the Vigil's deliberate exclusion -- all per the Master
+    # Compendium's Council/Branch breakdown. No seat holders are invented
+    # here beyond what the compendium actually names (Grand Director,
+    # Forge-Marshal Halvorsen) -- every other seat is explicitly "Vacant"
+    # rather than guessed, since the compendium doesn't name who holds them.
+    world["council"] = {
+        "first_minister": {"holder": "Vacant", "branch": "E",
+                            "domain": "Civil government, population, food & life support, policy"},
+        "forge_marshal": {"holder": "Halvorsen", "branch": "B",
+                           "domain": "Forge worlds' heavy industry, refining, fabrication, shipbuilding"},
+        "high_savant": {"holder": "Vacant", "branch": "C", "domain": "The Asterion Collegium (research)"},
+        "grand_admiral": {"holder": "Vacant", "branch": "A",
+                           "domain": "Military fleets, escorts, naval doctrine"},
+        "quartermaster_general": {"holder": "Vacant", "branch": "F",
+                                   "domain": "Freight, convoys, supply routes, logistics doctrine"},
+        "colonial_warden": {"holder": "Vacant", "branch": "D",
+                             "domain": "Survey, colonization, colony specialization"},
+        "marshal_general": {"holder": "Vacant", "branch": "G", "domain": "The Legions (ground forces)"},
+        "first_steward_of_continuance": {"holder": "Vacant", "branch": "H",
+                                          "domain": "Office of Human Continuance -- civic culture, education, memory"},
+        "chancellor_general": {"holder": "Vacant", "branch": "I",
+                                "domain": "The Chancellery -- tithes, census, records, cross-branch reporting"},
+        "provost_general": {"holder": "Vacant", "branch": "J",
+                             "domain": "The Bureau -- counter-espionage, loyalty oversight, internal security"},
+    }
+
+    # world["branches"] holds every branch's rank ladder, keyed by its
+    # letter -- including K, even though Branch K has no Council seat.
+    # This is deliberate: a branch existing and a branch having a Council
+    # seat are two different facts, and K is proof they don't always
+    # coincide.
+    world["branches"] = {
+        "A": {"name": "Navy", "council_seat": "grand_admiral",
+              "ranks": ["Fleet Marshal (Dominion)", "Sector Admiral", "Admiral", "Commodore", "Captain",
+                        "Commander", "Lieutenant", "Ensign", "Chief Petty Officer", "Crewman"],
+              "civilian_freight_ranks": ["Convoy Marshal", "Master", "First Officer", "Chief Engineer", "Deckhand"]},
+        "B": {"name": "Forge & Industry", "council_seat": "forge_marshal",
+              "ranks": ["Dominion Forge-Marshal", "Sector Forge Marshal", "Forge Governor", "Foundry Overseer",
+                        "Shift Marshal", "Line Chief", "Forgehand", "Laborer"]},
+        "C": {"name": "The Asterion Collegium", "council_seat": "high_savant",
+              "ranks": ["Dominion Savant", "Sector Savant", "Savant-Director", "Senior Archivist",
+                        "Archivist", "Adept"]},
+        "D": {"name": "Colonial Administration", "council_seat": "colonial_warden",
+              "ranks": ["Dominion Warden", "Sector Warden", "Survey Commander", "Colony Governor",
+                        "Settlement Marshal", "Foreman"]},
+        "E": {"name": "Civil Government", "council_seat": "first_minister",
+              "ranks": ["Dominion Minister", "Sector Minister", "Planetary Governor", "Regional Governor", "Clerk"],
+              "earth_only_ranks": ["Minister of Population & Labor", "Minister of Food & Life Support",
+                                    "Minister of Policy & Records"]},
+        "F": {"name": "Logistics & Supply", "council_seat": "quartermaster_general",
+              "ranks": ["Dominion Quartermaster", "Sector Quartermaster", "Depot Master", "Convoy Marshal"]},
+        "G": {"name": "The Legions", "council_seat": "marshal_general",
+              "ranks": ["Dominion Marshal", "Sector Marshal", "Legion Commander", "Colonel", "Captain",
+                        "Lieutenant", "Sergeant", "Trooper"]},
+        "H": {"name": "Office of Human Continuance", "council_seat": "first_steward_of_continuance",
+              "ranks": ["Dominion Steward", "Sector Steward", "World Curator", "Civic Advocate",
+                        "Archivist-Aide", "Candidate"]},
+        "I": {"name": "The Chancellery", "council_seat": "chancellor_general",
+              "ranks": ["Dominion Chancellor", "Sector Chancellor", "World Registrar", "Tithe Clerk",
+                        "Scrivener", "Adept-Scrivener"]},
+        "J": {"name": "The Bureau", "council_seat": "provost_general",
+              "ranks": ["Dominion Provost", "Sector Provost", "Station Chief", "Case Officer",
+                        "Field Agent", "Informant (unranked)"]},
+        "K": {"name": "The Vigil", "council_seat": None,
+              "ranks": ["Seeker", "Seeker's Hand", "Agents (ad hoc)"],
+              "note": "No Council seat -- deliberately outside the ten-seat structure. Includes the "
+                      "ultra-secret Silent Blades cadre, intentionally left undetailed."},
+    }
+
+    world["vigil"] = {
+        "top_rank": "First Seekers",
+        "reports_to": "Grand Director directly, privately",
+        "note": "Overlaps in jurisdiction with the Bureau (Branch J); mutual distrust between the two "
+                "is intentional, not a bug to fix.",
+    }
+
+    # Entities outside the Directorate entirely -- not branches, not
+    # subordinate to any Council seat. Kept separate from world["branches"]
+    # for the same reason the Vigil is kept separate from world["council"]:
+    # the data structure itself should reflect what's actually outside
+    # the chain of command, not just note it in a comment.
+    world["outside_directorate"] = {
+        "chartered_trading_houses": "Independent merchant houses, tithe-paying but self-governing.",
+        "wayfarers_guild": "Star-lane charting, relay stations. Parent branch unresolved -- explicitly "
+                            "undecided between Logistics (F) and the Collegium (C); do not hard-code it "
+                            "under either.",
+    }
     # Cycle-29 sync (Lesson 05): the compendium says Labs #2-#6 are already
     # built and operational; Lab #7 is still under construction, so it's
     # deliberately NOT added here — build_lab (in-game command) adds it later.
@@ -971,6 +1060,33 @@ def handle_confirm_servitor(args):
     record["status"] = "carried_out"
     print(f"Servitor Conversion carried out on {name}. The sentence is irreversible.")
 
+def show_council():
+    """Print the ten-seat Council roster, the full Branch A-K rank
+    ladders, the Vigil's deliberate exclusion, and entities entirely
+    outside the Directorate.
+    """
+    print("\n=== THE DIRECTORATE COUNCIL ===")
+    print("The Grand Director sits above all ten seats -- not one of the ten.\n")
+    for seat_id, seat in world["council"].items():
+        print(f"  {seat_id}: {seat['holder']} (Branch {seat['branch']})")
+        print(f"      {seat['domain']}")
+
+    print("\n=== BRANCHES A-K ===")
+    for letter, branch in world["branches"].items():
+        seat_note = f"Council seat: {branch['council_seat']}" if branch["council_seat"] else "No Council seat"
+        print(f"\n  Branch {letter} -- {branch['name']} ({seat_note})")
+        print(f"    Ranks: {' -> '.join(branch['ranks'])}")
+        if "note" in branch:
+            print(f"    {branch['note']}")
+
+    print("\nThe Vigil (Branch K) is not listed in the Council above -- deliberately excluded.")
+    vigil = world["vigil"]
+    print(f"  Top rank: {vigil['top_rank']} | Reports to: {vigil['reports_to']}")
+    print(f"  {vigil['note']}")
+
+    print("\n=== OUTSIDE THE DIRECTORATE ENTIRELY ===")
+    for name, note in world["outside_directorate"].items():
+        print(f"  {name.replace('_', ' ').title()}: {note}")
 
 def show_docket():
     """Print the Directorate Penal Code's articles and every charge record
@@ -1021,6 +1137,7 @@ def show_help():
     print("  labs                          - Show Collegium laboratories, their roles, and current multipliers")
     print("  build_lab                     - Construct the Collegium's next laboratory")
     print("  docket                        - Show the Directorate Penal Code and filed records")
+    print("  council                       - Show the Directorate Council, Branches A-K, and the Vigil")
     print("  charge <name> <article_id>    - Sentence <name> under a Penal Code article")
     print("  confirm_servitor <name> <y/n> <y/n> - Confirm (Vigil, Grand Director) a pending Servitor Conversion")
     print("  help                          - Show available commands")
@@ -1067,6 +1184,8 @@ def main():
             handle_build_lab()
         elif command == "docket":
             show_docket()
+        elif command == "council":
+            show_council()
         elif command == "charge":
             handle_charge(args)
         elif command == "confirm_servitor":
