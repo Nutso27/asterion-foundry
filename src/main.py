@@ -60,6 +60,7 @@ does. Change the constant, not the function body, when you just want to
 retune a number.
 """
 
+import json
 import random
 
 from research import Lab, ResearchState, Scientist
@@ -104,6 +105,10 @@ FLEET_TARGET = {"freighter": 6, "light_warship": 10}
 AUDIT_CONCEALMENT_CHANCE_PER_CYCLE = 0.05
 AUDIT_SILENT_DRAIN_RANGE = (1, 3)   # extra support supplies/cycle, concealed
 AUDIT_SUCCESS_CHANCE = 0.7           # Bureau's odds of catching it, once triggered
+
+# Persistence (Lesson 10): only the plain-dict portions of world round-trip
+# through JSON. See save_game() for what is deliberately left out.
+SAVE_FILE = "state.json"
 # How many `advance` steps a slot needs to finish one hull of each class,
 # before the lab-specialization construction-time multiplier is applied.
 BASE_BUILD_TIME_STEPS = {"freighter": 4, "light_warship": 6}
@@ -1390,6 +1395,64 @@ def show_audit():
         print("\nNo concealment has been discovered yet.")
 
 
+def save_game():
+    """Save the plain-dict portions of world state to state.json. Does
+    NOT persist world["research"], world["ship_classes"], world["shipyard"],
+    or world["penal_code"] -- those hold actual class instances, not plain
+    dicts, and need to_dict()/from_dict() methods added to those classes
+    before they can round-trip through JSON. Scoped honestly, not silently.
+    """
+    saveable = {
+        "time": world["time"],
+        "locations": world["locations"],
+        "ships": world["ships"],
+        "xenos_fragments": world["xenos_fragments"],
+        "multipliers": world["multipliers"],
+        "council": world["council"],
+        "standing_orders": world["standing_orders"],
+        "equipment_status": world["equipment_status"],
+        "directorate_code": world["directorate_code"],
+        "audit_system": world["audit_system"],
+    }
+    with open(SAVE_FILE, "w") as f:
+        json.dump(saveable, f, indent=2)
+    print(f"Saved to {SAVE_FILE} (note: research/shipyard/penal code progress is NOT yet saved).")
+
+
+def load_game():
+    """Load the plain-dict portions of world state from state.json, if
+    it exists. Everything not covered by save_game() keeps its fresh
+    cycle-29 seeded values, since it isn't saved yet either.
+    """
+    try:
+        with open(SAVE_FILE) as f:
+            saved = json.load(f)
+    except FileNotFoundError:
+        print(f"No {SAVE_FILE} found -- starting fresh.")
+        return
+
+    for key, value in saved.items():
+        world[key] = value
+    print(f"Loaded from {SAVE_FILE} (research/shipyard/penal code still start fresh -- see save_game()).")
+
+
+def handle_study_fragments():
+    """Spend banked xenos fragments on a direct Collegium analysis pass.
+    Deliberately NOT wired into the research lane/tech-tree system --
+    that system has no xenology lane or evidence-gating mechanism yet.
+    This is a simpler, separate mechanic until that's built properly.
+    """
+    if world["xenos_fragments"] < 3:
+        print(f"Insufficient xenos fragments for analysis (have {world['xenos_fragments']}, need 3).")
+        return
+    world["xenos_fragments"] -= 3
+    print(
+        "The Collegium completes its first formal analysis of the recovered hull fragments. "
+        "Construction methods are unlike anything in the Directorate's own engineering tradition -- "
+        "confirmed non-human origin, but no further conclusions can yet be drawn."
+    )
+
+
 def advance_world():
     """Advance the entire simulation by one discrete step.
 
@@ -1427,6 +1490,9 @@ def show_help():
     print("  audit                         - Show the Bureau audit log and doctrine")
     print("  council                       - Show the Directorate Council, Branches A-K, and the Vigil")
     print("  orders                        - Show Standing Orders and current equipment status")
+    print("  study_fragments               - Spend 3 xenos fragments on a Collegium analysis pass")
+    print("  save                          - Save plain-dict world state to state.json")
+    print("  load                          - Load plain-dict world state from state.json")
     print("  charge <name> <article_id>    - Sentence <name> under a Penal Code article")
     print("  confirm_servitor <name> <y/n> <y/n> - Confirm (Vigil, Grand Director) a pending Servitor Conversion")
     print("  help                          - Show available commands")
@@ -1484,6 +1550,12 @@ def main():
             show_council()
         elif command == "orders":
             show_standing_orders()
+        elif command == "study_fragments":
+            handle_study_fragments()
+        elif command == "save":
+            save_game()
+        elif command == "load":
+            load_game()
         elif command == "charge":
             handle_charge(args)
         elif command == "confirm_servitor":
@@ -1508,4 +1580,5 @@ seed_completed_research()
 # that is exactly what lets tests/test_main_integration.py import `world`
 # and every function above without blocking on `input()`.
 if __name__ == "__main__":
+    load_game()
     main()
