@@ -87,6 +87,9 @@ TRAVEL_TIME_STEPS = 2
 SHIPYARD_METAL_RESERVE = 50.0
 SLOT_EXPAND_COST = 30.0
 SHIPYARD_EXPAND_BATCH_SIZE = 3
+EQUIPMENT_METAL_RESERVE = 20.0
+EQUIPMENT_UPGRADE_COST = 40.0
+FREIGHTER_METAL_PICKUP_RESERVE = 60.0
 # How many `advance` steps a slot needs to finish one hull of each class,
 # before the lab-specialization construction-time multiplier is applied.
 BASE_BUILD_TIME_STEPS = {"freighter": 4, "light_warship": 6}
@@ -333,6 +336,44 @@ def build_ship_and_facility_state():
                             "undecided between Logistics (F) and the Collegium (C); do not hard-code it "
                             "under either.",
     }
+
+    # Standing Orders (Lesson 07): the infrastructure-expansion order
+    # already runs implicitly inside update_shipyard() -- this makes it
+    # visible and logged, rather than adding a second competing mechanism.
+    # The equipment order is genuinely new behavior; nothing upgraded
+    # equipment before this.
+    world["standing_orders"] = {
+        "infrastructure_expansion": {
+            "status": "active",
+            "policy": "Whenever Mars refined metal exceeds routine operational needs, "
+                      "queue additional infrastructure rather than letting surplus sit idle.",
+            "priority": ["1. Correct identified bottlenecks", "2. Defenses", "3. General expansion"],
+            "log": [],
+        },
+        "equipment_and_asset_upgrades": {
+            "status": "active",
+            "policy": "As refined metal allows, incrementally upgrade the quality of equipment "
+                      "already fielded across the empire.",
+            "priority": ["1. Frontline/combat equipment", "2. Industrial equipment",
+                         "3. Administrative/personal equipment"],
+            "log": [],
+        },
+    }
+
+    world["equipment_status"] = {
+        "frontline_combat": {"tier_index": 0, "tiers": [
+            "Standard issue", "Reinforced-pattern armor and weapon mounts",
+            "Forge-tempered plating, upgraded fire-control", "Collegium-pattern advanced war matériel",
+        ]},
+        "industrial": {"tier_index": 0, "tiers": [
+            "Standard issue", "Reinforced extraction and refinery tooling",
+            "Automated forge-line hardware", "Collegium-pattern advanced industrial systems",
+        ]},
+        "administrative_personal": {"tier_index": 0, "tiers": [
+            "Standard issue", "Improved personal gear and office equipment",
+            "Forge-tempered personal kit", "Collegium-pattern advanced administrative systems",
+        ]},
+    }
     # Cycle-29 sync (Lesson 05): the compendium says Labs #2-#6 are already
     # built and operational; Lab #7 is still under construction, so it's
     # deliberately NOT added here — build_lab (in-game command) adds it later.
@@ -513,7 +554,8 @@ def update_csv_meridian():
 
     elif ship["status"] == "idle_at_mars":
         mars = world["locations"]["mars"]
-        load_amount = min(ship["cargo_capacity"], mars["refined_metal"])
+        available_for_pickup = max(0, mars["refined_metal"] - FREIGHTER_METAL_PICKUP_RESERVE)
+        load_amount = min(ship["cargo_capacity"], available_for_pickup)
         mars["refined_metal"] -= load_amount
         ship["cargo_refined_metal"] = load_amount
         ship["status"] = "transit_to_earth"
@@ -871,6 +913,11 @@ def update_shipyard():
                 f"Shipyard expanded by {added} slot(s) (spent {spent:.0f} refined metal). "
                 f"Total slots: {yard.slots_total}/{yard.target_minimum}."
             )
+            world["standing_orders"]["infrastructure_expansion"]["log"].append({
+                "effective_cycle": world["time"],
+                "reason": f"Infrastructure-expansion standing order: shipyard expanded by {added} slot(s).",
+                "slots_added": added,
+            })
 
     # 2. Advance slots already building; completions free the slot.
     for slot in slots:
@@ -1107,6 +1154,57 @@ def show_docket():
     print("\nUse 'charge <name> <article_id>' to sentence someone. Capital sentences additionally need 'confirm_servitor'.")
 
 
+def update_standing_orders():
+    """Run the equipment-and-asset-upgrades standing order: spend refined
+    metal above a small reserve to upgrade one equipment category per
+    step, always in priority order (frontline first). Logged with
+    effective_cycle and reason, matching how the compendium logs rate
+    changes -- never applied silently.
+    """
+    mars = world["locations"]["mars"]
+    available = mars["refined_metal"] - EQUIPMENT_METAL_RESERVE
+
+    if available < EQUIPMENT_UPGRADE_COST:
+        return
+
+    for category in ["frontline_combat", "industrial", "administrative_personal"]:
+        status = world["equipment_status"][category]
+        if status["tier_index"] + 1 < len(status["tiers"]):
+            mars["refined_metal"] -= EQUIPMENT_UPGRADE_COST
+            status["tier_index"] += 1
+            new_tier = status["tiers"][status["tier_index"]]
+            world["standing_orders"]["equipment_and_asset_upgrades"]["log"].append({
+                "effective_cycle": world["time"],
+                "reason": f"Equipment-and-asset-upgrades standing order: {category} funded from surplus.",
+                "category": category,
+                "new_tier": new_tier,
+            })
+            print(f"Standing order (equipment upgrades): {category.replace('_', ' ')} upgraded to '{new_tier}'.")
+            return  # one upgrade per step -- matches "incrementally"
+
+
+def show_standing_orders():
+    """Print both standing orders' policy, priority order, and every
+    automatic action logged under them so far, plus current equipment tiers.
+    """
+    print("\n=== STANDING ORDERS ===")
+    for order_id, order in world["standing_orders"].items():
+        print(f"\n{order_id} [{order['status']}]")
+        print(f"  Policy: {order['policy']}")
+        for line in order["priority"]:
+            print(f"    {line}")
+        if order["log"]:
+            print(f"  Recent actions:")
+            for entry in order["log"][-5:]:
+                print(f"    Cycle {entry['effective_cycle']}: {entry['reason']}")
+        else:
+            print("  No actions logged yet.")
+
+    print("\n=== EQUIPMENT STATUS ===")
+    for category, status in world["equipment_status"].items():
+        print(f"  {category.replace('_', ' ').title()}: {status['tiers'][status['tier_index']]}")
+
+
 def advance_world():
     """Advance the entire simulation by one discrete step.
 
@@ -1122,6 +1220,7 @@ def advance_world():
     update_research()
     update_lab_specialization()
     update_shipyard()
+    update_standing_orders()
 
 
 def show_help():
@@ -1138,6 +1237,7 @@ def show_help():
     print("  build_lab                     - Construct the Collegium's next laboratory")
     print("  docket                        - Show the Directorate Penal Code and filed records")
     print("  council                       - Show the Directorate Council, Branches A-K, and the Vigil")
+    print("  orders                        - Show Standing Orders and current equipment status")
     print("  charge <name> <article_id>    - Sentence <name> under a Penal Code article")
     print("  confirm_servitor <name> <y/n> <y/n> - Confirm (Vigil, Grand Director) a pending Servitor Conversion")
     print("  help                          - Show available commands")
@@ -1186,6 +1286,8 @@ def main():
             show_docket()
         elif command == "council":
             show_council()
+        elif command == "orders":
+            show_standing_orders()
         elif command == "charge":
             handle_charge(args)
         elif command == "confirm_servitor":
