@@ -232,13 +232,14 @@ def build_ship_and_facility_state():
     world["lab_roles"] = {"mars_collegium_lab": FLEXIBLE_AUTO_RESEARCH}
     # Cycle-29 sync (Lesson 05): these three numbers aren't guesses — each
     # one ticks via Collegium Lab #2/#3 (construction/research time, -2%
-    # every 5 cycles) or Lab #4-#6 (universal efficiency, +1% every 5
-    # cycles). Fresh game starts all three at 1.0 (no effect yet); by
-    # cycle 29 enough ticks have happened to reach these values.
+    # every 5 cycles) or Lab #4-#6 (universal efficiency). In this codebase
+    # lower is better on all three (see show_labs()'s own printed text and
+    # update_mars()'s cost formula) — a lower universal_efficiency_multiplier
+    # means a cheaper Mars support cost per cycle.
     world["multipliers"] = {
         "construction_time_multiplier": 0.98,   # lower = faster builds
         "research_time_multiplier": 0.98,       # lower = faster research
-        "universal_efficiency_multiplier": 1.01,    # higher = more output per cycle
+        "universal_efficiency_multiplier": 1.0,    # lower = cheaper Mars support cost
     }
 
     world["penal_code"] = PenalCode.default_code()
@@ -314,37 +315,61 @@ def show_status():
             "Type 'docket' for details."
         )
 
+def _completed_effect_multiplier(effect_key, default=1.0):
+    """Combine 'effect_key' across every completed research node that 
+    defines it. Nodes without that key are simply skipped
+    """
+    multiplier = default
+    for tech_id in world["research"].completed:
+        effect = world["research"].nodes[tech_id].effect
+        if effect_key in effect:
+            multiplier *= effect[effect_key]
+    return multiplier
 
 def update_mars():
-    """Run one production step for the Mars forge world.
-
-    Mars needs support supplies to keep its workforce and forge complexes
-    operating. The base cost is 10 per step; the Collegium's universal
-    efficiency multiplier (see docs/systems/lab-specialization.md) can
-    lower this over time, down to a floor of half price. When supplied,
-    Mars extracts raw metal and refines part of it.
-    """
     mars = world["locations"]["mars"]
-    cost = max(1, round(10 * world["multipliers"]["universal_efficiency_multiplier"]))
+    consumption_multiplier = _completed_effect_multiplier("support_supply_consumption_multiplier")
+    yield_multiplier = _completed_effect_multiplier("refined_metal_yield_multiplier")
+
+    cost = max(1, round(10 * world["multipliers"]["universal_efficiency_multiplier"] * consumption_multiplier))
 
     if mars["support_supplies"] >= cost:
         mars["support_supplies"] -= cost
         mars["raw_metal"] += 15
-
-        # The forge complex uses part of newly available raw metal immediately.
         mars["raw_metal"] -= 10
-        mars["refined_metal"] += 8
-
+        refined_gain = round(8 * yield_multiplier)
+        mars["refined_metal"] += refined_gain
         print(
             f"Mars forge complexes consumed {cost} support supplies, "
-            "extracted 15 raw metal, and refined 10 raw metal into 8 refined metal."
+            f"extracted 15 raw metal, and refined 10 raw metal into {refined_gain} refined metal."
         )
     else:
-        print(
-            "ALERT: Mars lacks support supplies. "
-            "Forge complexes are idle; extraction and refining have stopped."
-        )
+        print("ALERT: Mars lacks support supplies. Forge complexes are idle; extraction and refining have stopped.")
 
+def seed_completed_research():
+    """Fast-forward the Collegium to its cycle-29 research state, using
+    invest_rp() -- the same function the `invest` command calls -- so
+    seeding goes through the exact completion path the game already
+    trusts, rather than poking internal state directly.
+
+    Only two of the narrative's completed techs have a real equivalent
+    in this code's tech tree; see the Lesson 05 chat notes for why.
+    """
+    state = world["research"]
+
+    completed_at_seed = [
+        "pm_refined_alloy_process",     # closest equivalent to "Refinement Process Optimization"
+        "bc_closed_loop_life_support",  # closest equivalent to "Servitor & Robotic Labor Automation"
+    ]
+    for tech_id in completed_at_seed:
+        node = state.nodes[tech_id]
+        state.rp_stockpile[node.lane] = node.rp_cost
+        completed = invest_rp(state, tech_id, node.rp_cost)
+        if completed:
+            refresh_draw_pool(state, node.lane)
+            print(f"[seed] {node.name} marked complete.")
+        else:
+            print(f"[seed] WARNING: {node.name} did not complete — check rp_cost.")    
 
 def update_earth():
     """Run one simple Earth update.
@@ -1060,7 +1085,7 @@ def main():
 # loop starts.
 world["research"] = build_research_state()
 build_ship_and_facility_state()
-
+seed_completed_research()
 # This guard runs `main` only when Python starts this file directly (e.g.
 # `python src/main.py`), not when a test file imports it as a module —
 # that is exactly what lets tests/test_main_integration.py import `world`
