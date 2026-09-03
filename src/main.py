@@ -62,6 +62,7 @@ retune a number.
 
 import json
 import random
+from dataclasses import asdict
 
 from research import Lab, ResearchState, Scientist
 from research.engine import attempt_pilot_project, generate_rp, invest_rp, refresh_draw_pool
@@ -76,7 +77,7 @@ from research.lab_specialization import (
 from ship_design import MkResearchProject, ShipClass, complete_mk_research
 from research.models import TechNode
 from shipyard import LOGISTICS, WARSHIP, Shipyard, expand, next_build_assignment
-from penal_code import CAPITAL_TIER, PenalCode, charge, confirm_capital_sentence
+from penal_code import CAPITAL_TIER, PenalCode, SentencingTier, charge, confirm_capital_sentence
 
 # How many `advance` steps CSV Meridian spends in transit, each direction.
 TRAVEL_TIME_STEPS = 2
@@ -109,6 +110,35 @@ AUDIT_SUCCESS_CHANCE = 0.7           # Bureau's odds of catching it, once trigge
 # Persistence (Lesson 10): only the plain-dict portions of world round-trip
 # through JSON. See save_game() for what is deliberately left out.
 SAVE_FILE = "state.json"
+
+# Colony system (Lesson 11) -- per DESIGN_SPINE.md's survey -> outpost ->
+# sustain -> specialize chain (dev order items 9-10). Hive world dropped
+# from the specialization list -- explicitly out of first-prototype scope
+# per the Design Spine's own guardrails.
+SURVEY_COST = 20.0            # refined metal, from Mars
+OUTPOST_COST = 60.0           # refined metal, from Mars
+OUTPOST_SUPPORT_SEED = 50.0   # support supplies, from Earth -- the expedition's starting stock
+SPECIALIZE_COST = 80.0        # refined metal, from Mars
+COLONY_SUPPORT_CONSUMPTION = 5.0  # flat per-cycle cost once an outpost exists
+
+# Only specializations whose effects map onto resources this codebase
+# already tracks get real mechanical numbers. fuel_world, fortress_world,
+# and depot_trade_world are flavor-only for now -- no fuel, no combat, and
+# no multi-colony trade system exists yet to give them a real effect.
+SPECIALIZATION_EFFECTS = {
+    "mining_world": {"raw_metal_per_cycle": 10},
+    "forge_world": {"raw_metal_per_cycle": 10, "refined_metal_per_cycle": 6},
+    "research_world": {"rp_lane": "physics_and_materials", "rp_per_cycle": 1.0},
+    "agri_world": {"support_supplies_per_cycle": 8},  # simplification -- no separate
+                                                        # food resource exists; see
+                                                        # DESIGN_SPINE.md's note that
+                                                        # Earth's food economy is a
+                                                        # future, unimplemented system
+    "civilian_world": {"population_growth_per_cycle": 10},
+    "fuel_world": {},       # flavor only -- no fuel resource tracked yet
+    "fortress_world": {},   # flavor only -- no combat/defense mechanic yet
+    "depot_trade_world": {},# flavor only -- no multi-colony trade mechanic yet
+}
 # How many `advance` steps a slot needs to finish one hull of each class,
 # before the lab-specialization construction-time multiplier is applied.
 BASE_BUILD_TIME_STEPS = {"freighter": 4, "light_warship": 6}
@@ -434,6 +464,11 @@ def build_ship_and_facility_state():
         "active_concealment": None,
         "log": [],
     }
+
+    # world["colonies"] is empty at cycle 29 -- nothing in the compendium
+    # describes a second colony existing yet, so this starts genuinely
+    # empty rather than seeded, unlike everything else synced tonight.
+    world["colonies"] = {}
     # Cycle-29 sync (Lesson 05): the compendium says Labs #2-#6 are already
     # built and operational; Lab #7 is still under construction, so it's
     # deliberately NOT added here — build_lab (in-game command) adds it later.
@@ -1396,12 +1431,39 @@ def show_audit():
 
 
 def save_game():
-    """Save the plain-dict portions of world state to state.json. Does
-    NOT persist world["research"], world["ship_classes"], world["shipyard"],
-    or world["penal_code"] -- those hold actual class instances, not plain
-    dicts, and need to_dict()/from_dict() methods added to those classes
-    before they can round-trip through JSON. Scoped honestly, not silently.
+    """Save the full world state to state.json.
+
+    Plain-dict portions save directly. The three object-based systems
+    each get explicit handling:
+      - ship_classes / shipyard: dataclasses.asdict() -- they're simple,
+        flat dataclasses, nothing nested that asdict() can't already handle.
+      - research: only the MUTABLE state saves (labs, scientists,
+        rp_stockpile, rp_invested, active_pool, completed, trial_log).
+        lanes/nodes are NOT saved -- they're reloaded fresh from
+        technologies.json on load, since that file is the source of
+        truth for tech definitions, not something a save file should
+        fork a copy of.
+      - penal_code: the code itself (articles/doctrine) is NOT saved,
+        for the same reason -- default_code() is the source of truth.
+        Only world["penal_records"] saves, with each record's
+        SentencingTier enum converted to its .value string, since raw
+        enums aren't JSON-serializable.
     """
+    state = world["research"]
+    research_save = {
+        "labs": {lab_id: asdict(lab) for lab_id, lab in state.labs.items()},
+        "scientists": {sci_id: asdict(sci) for sci_id, sci in state.scientists.items()},
+        "rp_stockpile": state.rp_stockpile,
+        "rp_invested": state.rp_invested,
+        "active_pool": state.active_pool,
+        "completed": list(state.completed),  # set -> list, JSON has no set type
+        "trial_log": [asdict(result) for result in state.trial_log],
+    }
+
+    penal_records_save = [
+        {**record, "tier": record["tier"].value} for record in world["penal_records"]
+    ]
+
     saveable = {
         "time": world["time"],
         "locations": world["locations"],
@@ -1413,16 +1475,29 @@ def save_game():
         "equipment_status": world["equipment_status"],
         "directorate_code": world["directorate_code"],
         "audit_system": world["audit_system"],
+        "colonies": world["colonies"],
+        "ship_classes": {cid: asdict(sc) for cid, sc in world["ship_classes"].items()},
+        "ship_class_stats": world["ship_class_stats"],
+        "shipyard": asdict(world["shipyard"]),
+        "shipyard_slots": world["shipyard_slots"],
+        "lab_roles": world["lab_roles"],
+        "research": research_save,
+        "penal_records": penal_records_save,
     }
     with open(SAVE_FILE, "w") as f:
         json.dump(saveable, f, indent=2)
-    print(f"Saved to {SAVE_FILE} (note: research/shipyard/penal code progress is NOT yet saved).")
+    print(f"Saved to {SAVE_FILE} -- full state, including research, shipyard, and penal records.")
 
 
 def load_game():
-    """Load the plain-dict portions of world state from state.json, if
-    it exists. Everything not covered by save_game() keeps its fresh
-    cycle-29 seeded values, since it isn't saved yet either.
+    """Load the full world state from state.json, if it exists.
+
+    Rebuilds ship_classes/shipyard from their saved dicts via each
+    dataclass's constructor. Rebuilds research by starting fresh from
+    build_research_state() (reloading lanes/nodes from
+    technologies.json, the source of truth), then overwriting its
+    mutable fields from the save. Reconstructs each penal record's
+    SentencingTier enum from its saved .value string.
     """
     try:
         with open(SAVE_FILE) as f:
@@ -1431,9 +1506,36 @@ def load_game():
         print(f"No {SAVE_FILE} found -- starting fresh.")
         return
 
-    for key, value in saved.items():
-        world[key] = value
-    print(f"Loaded from {SAVE_FILE} (research/shipyard/penal code still start fresh -- see save_game()).")
+    for key in ["time", "locations", "ships", "xenos_fragments", "multipliers",
+                "council", "standing_orders", "equipment_status", "directorate_code",
+                "audit_system", "colonies", "ship_class_stats", "shipyard_slots", "lab_roles"]:
+        if key in saved:
+            world[key] = saved[key]
+
+    if "ship_classes" in saved:
+        world["ship_classes"] = {
+            cid: ShipClass(**sc) for cid, sc in saved["ship_classes"].items()
+        }
+    if "shipyard" in saved:
+        world["shipyard"] = Shipyard(**saved["shipyard"])
+
+    if "research" in saved:
+        r = saved["research"]
+        state = build_research_state()  # fresh lanes/nodes from technologies.json
+        state.labs = {lab_id: Lab(**lab) for lab_id, lab in r["labs"].items()}
+        state.scientists = {sci_id: Scientist(**sci) for sci_id, sci in r["scientists"].items()}
+        state.rp_stockpile = r["rp_stockpile"]
+        state.rp_invested = r["rp_invested"]
+        state.active_pool = r["active_pool"]
+        state.completed = set(r["completed"])
+        world["research"] = state
+
+    if "penal_records" in saved:
+        world["penal_records"] = [
+            {**record, "tier": SentencingTier(record["tier"])} for record in saved["penal_records"]
+        ]
+
+    print(f"Loaded from {SAVE_FILE} -- full state restored.")
 
 
 def handle_study_fragments():
@@ -1453,6 +1555,141 @@ def handle_study_fragments():
     )
 
 
+def handle_survey(args):
+    """Handle `survey <name>`: spend refined metal at Mars to survey a
+    new colony target. Creates the colony in "surveyed" status -- not
+    yet an outpost, produces nothing, consumes nothing.
+    """
+    if len(args) < 1:
+        print("Usage: survey <name>")
+        return
+    name = " ".join(args)
+    colony_id = name.lower().replace(" ", "_")
+    if colony_id in world["colonies"]:
+        print(f"A colony survey named '{name}' already exists.")
+        return
+
+    mars = world["locations"]["mars"]
+    if mars["refined_metal"] < SURVEY_COST:
+        print(f"Not enough refined metal to survey (need {SURVEY_COST:.0f}, have {mars['refined_metal']:.0f}).")
+        return
+
+    mars["refined_metal"] -= SURVEY_COST
+    world["colonies"][colony_id] = {
+        "name": name, "status": "surveyed", "specialization": None,
+        "support_supplies": 0.0, "raw_metal": 0.0, "refined_metal": 0.0, "population": 0,
+    }
+    print(f"Survey complete: '{name}' is viable for an outpost. Use 'outpost {colony_id}' to establish one.")
+
+
+def handle_outpost(args):
+    """Handle `outpost <colony_id>`: establish an outpost at a surveyed
+    colony, spending refined metal (Mars) and seeding support supplies
+    (Earth) for the expedition, per DESIGN_SPINE.md's colony chain.
+    """
+    if len(args) != 1:
+        print("Usage: outpost <colony_id>. Type 'colonies' to see valid ids.")
+        return
+    colony_id = args[0]
+    colony = world["colonies"].get(colony_id)
+    if colony is None or colony["status"] != "surveyed":
+        print(f"'{colony_id}' is not a surveyed colony awaiting an outpost. Type 'colonies' to check.")
+        return
+
+    mars = world["locations"]["mars"]
+    earth = world["locations"]["earth"]
+    if mars["refined_metal"] < OUTPOST_COST or earth["support_supplies"] < OUTPOST_SUPPORT_SEED:
+        print("Insufficient resources to establish this outpost (refined metal at Mars, support supplies from Earth).")
+        return
+
+    mars["refined_metal"] -= OUTPOST_COST
+    earth["support_supplies"] -= OUTPOST_SUPPORT_SEED
+    colony["status"] = "outpost"
+    colony["support_supplies"] = OUTPOST_SUPPORT_SEED
+    colony["population"] = 50
+    print(f"Outpost established at '{colony['name']}'. Population 50. Use 'specialize {colony_id} <type>' when ready.")
+
+
+def handle_specialize(args):
+    """Handle `specialize <colony_id> <type>`: commit an existing outpost
+    to one of the specializations DESIGN_SPINE.md lists (minus hive world
+    -- explicitly out of scope). Moves the colony to "established" status.
+    """
+    if len(args) != 2:
+        types = ", ".join(SPECIALIZATION_EFFECTS.keys())
+        print(f"Usage: specialize <colony_id> <type>. Valid types: {types}")
+        return
+    colony_id, spec_type = args
+    colony = world["colonies"].get(colony_id)
+    if colony is None or colony["status"] != "outpost":
+        print(f"'{colony_id}' is not an outpost ready to specialize. Type 'colonies' to check.")
+        return
+    if spec_type not in SPECIALIZATION_EFFECTS:
+        types = ", ".join(SPECIALIZATION_EFFECTS.keys())
+        print(f"Unknown specialization '{spec_type}'. Valid types: {types}")
+        return
+
+    mars = world["locations"]["mars"]
+    if mars["refined_metal"] < SPECIALIZE_COST:
+        print(f"Not enough refined metal to specialize (need {SPECIALIZE_COST:.0f}, have {mars['refined_metal']:.0f}).")
+        return
+
+    mars["refined_metal"] -= SPECIALIZE_COST
+    colony["specialization"] = spec_type
+    colony["status"] = "established"
+    flavor_only = not SPECIALIZATION_EFFECTS[spec_type]
+    note = " (flavor only -- no mechanical effect exists for this type yet)" if flavor_only else ""
+    print(f"'{colony['name']}' specialized as {spec_type}{note}.")
+
+
+def update_colonies():
+    """Run one production/consumption step for every outpost/established
+    colony: consume support supplies, and -- for established colonies --
+    apply their specialization's effect, using only resource types this
+    codebase already tracks.
+    """
+    for colony in world["colonies"].values():
+        if colony["status"] not in ("outpost", "established"):
+            continue
+
+        if colony["support_supplies"] >= COLONY_SUPPORT_CONSUMPTION:
+            colony["support_supplies"] -= COLONY_SUPPORT_CONSUMPTION
+        else:
+            print(f"ALERT: '{colony['name']}' lacks support supplies. Growth and output stalled.")
+            continue
+
+        if colony["status"] == "established":
+            effects = SPECIALIZATION_EFFECTS[colony["specialization"]]
+            if "raw_metal_per_cycle" in effects:
+                colony["raw_metal"] += effects["raw_metal_per_cycle"]
+            if "refined_metal_per_cycle" in effects:
+                colony["refined_metal"] += effects["refined_metal_per_cycle"]
+            if "support_supplies_per_cycle" in effects:
+                colony["support_supplies"] += effects["support_supplies_per_cycle"]
+            if "population_growth_per_cycle" in effects:
+                colony["population"] += effects["population_growth_per_cycle"]
+            if "rp_lane" in effects:
+                state = world["research"]
+                lane = effects["rp_lane"]
+                state.rp_stockpile[lane] = state.rp_stockpile.get(lane, 0.0) + effects["rp_per_cycle"]
+
+
+def show_colonies():
+    """Print every colony's status, specialization, and current stockpiles."""
+    print("\n=== COLONIES ===")
+    if not world["colonies"]:
+        print("No colonies surveyed yet. Use 'survey <name>' to begin.")
+        return
+    for colony_id, colony in world["colonies"].items():
+        spec = colony["specialization"] or "none"
+        print(f"\n  {colony_id}: {colony['name']} [{colony['status']}] -- specialization: {spec}")
+        if colony["status"] != "surveyed":
+            print(
+                f"    Support {colony['support_supplies']:.1f} | Raw metal {colony['raw_metal']:.1f} | "
+                f"Refined metal {colony['refined_metal']:.1f} | Population {colony['population']}"
+            )
+
+
 def advance_world():
     """Advance the entire simulation by one discrete step.
 
@@ -1464,6 +1701,7 @@ def advance_world():
 
     update_earth()
     update_mars()
+    update_colonies()
     update_audit()
     update_csv_meridian()
     update_research()
@@ -1491,8 +1729,12 @@ def show_help():
     print("  council                       - Show the Directorate Council, Branches A-K, and the Vigil")
     print("  orders                        - Show Standing Orders and current equipment status")
     print("  study_fragments               - Spend 3 xenos fragments on a Collegium analysis pass")
-    print("  save                          - Save plain-dict world state to state.json")
-    print("  load                          - Load plain-dict world state from state.json")
+    print("  survey <name>                 - Survey a new colony target")
+    print("  outpost <colony_id>           - Establish an outpost at a surveyed colony")
+    print("  specialize <colony_id> <type> - Commit an outpost to a specialization")
+    print("  colonies                      - Show all surveyed/outpost/established colonies")
+    print("  save                          - Save full world state to state.json")
+    print("  load                          - Load full world state from state.json")
     print("  charge <name> <article_id>    - Sentence <name> under a Penal Code article")
     print("  confirm_servitor <name> <y/n> <y/n> - Confirm (Vigil, Grand Director) a pending Servitor Conversion")
     print("  help                          - Show available commands")
@@ -1552,6 +1794,14 @@ def main():
             show_standing_orders()
         elif command == "study_fragments":
             handle_study_fragments()
+        elif command == "survey":
+            handle_survey(args)
+        elif command == "outpost":
+            handle_outpost(args)
+        elif command == "specialize":
+            handle_specialize(args)
+        elif command == "colonies":
+            show_colonies()
         elif command == "save":
             save_game()
         elif command == "load":
