@@ -60,6 +60,8 @@ does. Change the constant, not the function body, when you just want to
 retune a number.
 """
 
+import random
+
 from research import Lab, ResearchState, Scientist
 from research.engine import attempt_pilot_project, generate_rp, invest_rp, refresh_draw_pool
 from research.lab_specialization import (
@@ -96,6 +98,12 @@ FREIGHTER_METAL_PICKUP_RESERVE = 60.0
 # number (from before the cap existed) are left alone -- only future
 # builds are affected.
 FLEET_TARGET = {"freighter": 6, "light_warship": 10}
+# Audit mechanic (Lesson 09): these three numbers are new game balance,
+# not reproduced from the compendium -- it establishes the Halvorsen
+# precedent narratively but never gives exact odds/amounts. Tune freely.
+AUDIT_CONCEALMENT_CHANCE_PER_CYCLE = 0.05
+AUDIT_SILENT_DRAIN_RANGE = (1, 3)   # extra support supplies/cycle, concealed
+AUDIT_SUCCESS_CHANCE = 0.7           # Bureau's odds of catching it, once triggered
 # How many `advance` steps a slot needs to finish one hull of each class,
 # before the lab-specialization construction-time multiplier is applied.
 BASE_BUILD_TIME_STEPS = {"freighter": 4, "light_warship": 6}
@@ -413,6 +421,13 @@ def build_ship_and_facility_state():
             "description": "Mandated procedure for any confirmed non-human contact.",
             "enforced_by": [],  # no first-contact incident has occurred since cycle 3
         },
+    }
+
+    world["audit_system"] = {
+        "doctrine": "The Directorate rewards correction over concealment; audits exist to "
+                    "surface honest bad news, not to punish it (the Halvorsen precedent).",
+        "active_concealment": None,
+        "log": [],
     }
     # Cycle-29 sync (Lesson 05): the compendium says Labs #2-#6 are already
     # built and operational; Lab #7 is still under construction, so it's
@@ -1291,6 +1306,90 @@ def show_standing_orders():
         print(f"  {category.replace('_', ' ').title()}: {status['tiers'][status['tier_index']]}")
 
 
+def update_audit():
+    """Run one honest-reporting audit-system step. Fills the gap 'code'
+    shows for honest_reporting (no Penal Code article enforces it) --
+    concealment here is caught by 'audit', not by charging anyone.
+
+    Deliberately prints nothing while a concealment is active and
+    undetected -- an audit-worthy discrepancy that announces itself in
+    the normal status output wouldn't be much of a concealment.
+    """
+    audit = world["audit_system"]
+    mars = world["locations"]["mars"]
+
+    if audit["active_concealment"] is None:
+        if random.random() < AUDIT_CONCEALMENT_CHANCE_PER_CYCLE:
+            audit["active_concealment"] = {
+                "seat_id": "forge_marshal",
+                "started_cycle": world["time"],
+                "drain_per_cycle": random.randint(*AUDIT_SILENT_DRAIN_RANGE),
+                "total_concealed": 0.0,
+            }
+        return
+
+    concealment = audit["active_concealment"]
+    drain = min(concealment["drain_per_cycle"], mars["support_supplies"])
+    mars["support_supplies"] -= drain
+    concealment["total_concealed"] += drain
+
+
+def handle_audit(args):
+    """Handle `audit <seat_id>`: the Bureau attempts to uncover any
+    active concealment under that seat.
+    """
+    if len(args) != 1:
+        print("Usage: audit <seat_id>. Currently only 'forge_marshal' can have an active concealment.")
+        return
+
+    seat_id = args[0]
+    audit = world["audit_system"]
+    concealment = audit["active_concealment"]
+
+    if concealment is None or concealment["seat_id"] != seat_id:
+        print(f"Bureau audit of {seat_id}: no discrepancy found. Reported figures check out.")
+        return
+
+    if random.random() < AUDIT_SUCCESS_CHANCE:
+        cycles_concealed = world["time"] - concealment["started_cycle"]
+        print(
+            f"Bureau audit of {seat_id}: CONCEALMENT DISCOVERED. "
+            f"{concealment['total_concealed']:.0f} support supplies silently diverted over "
+            f"{cycles_concealed} cycle(s), unreported since cycle {concealment['started_cycle']}."
+        )
+        print(
+            "Per Directorate doctrine (reward correction over concealment): no charge filed. "
+            f"{seat_id} is ordered to correct the figures going forward."
+        )
+        audit["log"].append({
+            "seat_id": seat_id, "discovered_cycle": world["time"],
+            "total_concealed": concealment["total_concealed"],
+            "outcome": "corrected, no charge (Halvorsen precedent)",
+        })
+        audit["active_concealment"] = None
+    else:
+        print(f"Bureau audit of {seat_id}: inconclusive. No discrepancy found this pass.")
+
+
+def show_audit():
+    """Print the audit doctrine and every past discovered concealment.
+    Deliberately never reveals whether a concealment is currently active
+    -- that would defeat the point of 'audit' being a real gamble.
+    """
+    audit = world["audit_system"]
+    print("\n=== BUREAU AUDIT LOG (Honest Reporting) ===")
+    print(f"Doctrine: {audit['doctrine']}")
+    if audit["log"]:
+        print("\nPast audits:")
+        for entry in audit["log"]:
+            print(
+                f"  Cycle {entry['discovered_cycle']}: {entry['seat_id']} -- "
+                f"{entry['total_concealed']:.0f} concealed, {entry['outcome']}"
+            )
+    else:
+        print("\nNo concealment has been discovered yet.")
+
+
 def advance_world():
     """Advance the entire simulation by one discrete step.
 
@@ -1302,6 +1401,7 @@ def advance_world():
 
     update_earth()
     update_mars()
+    update_audit()
     update_csv_meridian()
     update_research()
     update_lab_specialization()
@@ -1323,6 +1423,8 @@ def show_help():
     print("  build_lab                     - Construct the Collegium's next laboratory")
     print("  docket                        - Show the Directorate Penal Code and filed records")
     print("  code                          - Show the five-article Directorate Code")
+    print("  audit <seat_id>              - Bureau attempts to uncover concealment under that seat")
+    print("  audit                         - Show the Bureau audit log and doctrine")
     print("  council                       - Show the Directorate Council, Branches A-K, and the Vigil")
     print("  orders                        - Show Standing Orders and current equipment status")
     print("  charge <name> <article_id>    - Sentence <name> under a Penal Code article")
@@ -1373,6 +1475,11 @@ def main():
             show_docket()
         elif command == "code":
             show_directorate_code()
+        elif command == "audit":
+            if args:
+                handle_audit(args)
+            else:
+                show_audit()
         elif command == "council":
             show_council()
         elif command == "orders":
