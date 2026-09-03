@@ -90,6 +90,12 @@ SHIPYARD_EXPAND_BATCH_SIZE = 3
 EQUIPMENT_METAL_RESERVE = 20.0
 EQUIPMENT_UPGRADE_COST = 40.0
 FREIGHTER_METAL_PICKUP_RESERVE = 60.0
+# Fleet caps: once a class hits this many in-service hulls, the shipyard
+# stops building more of that class (locked slots for a capped class
+# simply idle rather than force a build). Existing hulls above this
+# number (from before the cap existed) are left alone -- only future
+# builds are affected.
+FLEET_TARGET = {"freighter": 6, "light_warship": 10}
 # How many `advance` steps a slot needs to finish one hull of each class,
 # before the lab-specialization construction-time multiplier is applied.
 BASE_BUILD_TIME_STEPS = {"freighter": 4, "light_warship": 6}
@@ -373,6 +379,40 @@ def build_ship_and_facility_state():
             "Standard issue", "Improved personal gear and office equipment",
             "Forge-tempered personal kit", "Collegium-pattern advanced administrative systems",
         ]},
+    }
+
+    # Directorate Code (Lesson 08): constitutional/structural law, distinct
+    # from the Penal Code (individual criminal offenses). Cross-referenced
+    # via enforced_by rather than merged -- they're related, not the same
+    # system. Two articles are honestly left with gaps below; see chat notes.
+    world["directorate_code"] = {
+        "sovereignty": {
+            "name": "Sovereignty",
+            "description": "All authority within Directorate space flows from the Grand Director.",
+            "enforced_by": ["treason_against_the_directorate"],
+        },
+        "honest_reporting": {
+            "name": "Honest Reporting",
+            "description": "Concealed or falsified figures are discoverable through audits; correction "
+                          "is rewarded over concealment (the Halvorsen precedent).",
+            "enforced_by": [],  # deliberately empty -- handled via audit/correction, not the Penal Code
+        },
+        "requisition_authority": {
+            "name": "Requisition Authority",
+            "description": "The Directorate's standing right to requisition resources and labor as needed.",
+            "enforced_by": ["hoarding_of_strategic_supply"],
+        },
+        "chain_of_command": {
+            "name": "Chain of Command",
+            "description": "Orders flow down an unambiguous hierarchy; no intermediary may be bypassed "
+                          "or defied.",
+            "enforced_by": ["insubordination_under_command", "desertion_of_post"],
+        },
+        "xenos_contact_protocol": {
+            "name": "Xenos Contact Protocol",
+            "description": "Mandated procedure for any confirmed non-human contact.",
+            "enforced_by": [],  # no first-contact incident has occurred since cycle 3
+        },
     }
     # Cycle-29 sync (Lesson 05): the compendium says Labs #2-#6 are already
     # built and operational; Lab #7 is still under construction, so it's
@@ -939,6 +979,9 @@ def update_shipyard():
     for slot in slots:
         if slot["building_class_id"] is None:
             allowed = [slot["locked_category"]] if slot["locked_category"] else [WARSHIP, LOGISTICS]
+            allowed = [c for c in allowed if fleet_counts[c] < FLEET_TARGET[CATEGORY_TO_CLASS[c]]]
+            if not allowed:
+                continue  # every category this slot could build is at cap -- idle this step
             category = next_build_assignment(allowed, fleet_counts, demand_counts)
             class_id = CATEGORY_TO_CLASS[category]
             slot["building_class_id"] = class_id
@@ -1108,15 +1151,38 @@ def handle_confirm_servitor(args):
     print(f"Servitor Conversion carried out on {name}. The sentence is irreversible.")
 
 def show_council():
-    """Print the ten-seat Council roster, the full Branch A-K rank
-    ladders, the Vigil's deliberate exclusion, and entities entirely
-    outside the Directorate.
+    """Print the ten-seat Council roster with each seat's domain backed
+    by a live number pulled from the actual system it oversees, the full
+    Branch A-K rank ladders, the Vigil's deliberate exclusion, and
+    entities entirely outside the Directorate.
     """
     print("\n=== THE DIRECTORATE COUNCIL ===")
     print("The Grand Director sits above all ten seats -- not one of the ten.\n")
+
+    live_status = {
+        "grand_admiral": lambda: (
+            f"{len(world['ship_classes']['light_warship'].in_service)} light warship(s) in service"
+        ),
+        "quartermaster_general": lambda: (
+            f"{len(world['ship_classes']['freighter'].in_service)} freighter(s) in service"
+        ),
+        "forge_marshal": lambda: (
+            f"Mars refined metal: {world['locations']['mars']['refined_metal']:.1f}"
+        ),
+        "high_savant": lambda: (
+            f"{len(world['research'].completed)} technologies completed, "
+            f"{len(world['lab_roles'])} labs operational"
+        ),
+        "provost_general": lambda: (
+            f"{len(world['penal_records'])} record(s) on file"
+        ),
+    }
+
     for seat_id, seat in world["council"].items():
         print(f"  {seat_id}: {seat['holder']} (Branch {seat['branch']})")
         print(f"      {seat['domain']}")
+        if seat_id in live_status:
+            print(f"      Current: {live_status[seat_id]()}")
 
     print("\n=== BRANCHES A-K ===")
     for letter, branch in world["branches"].items():
@@ -1152,6 +1218,26 @@ def show_docket():
             print(f"  {record['name']} — {record['article_id']} — {record['tier'].value} — {record['status']}")
 
     print("\nUse 'charge <name> <article_id>' to sentence someone. Capital sentences additionally need 'confirm_servitor'.")
+
+
+def show_directorate_code():
+    """Print the five-article Directorate Code, each cross-referenced
+    against the Penal Code articles that actually enforce it -- or noted
+    as an honest gap where none do.
+    """
+    code = world["directorate_code"]
+    penal_code = world["penal_code"]
+    print("\n=== THE DIRECTORATE CODE ===")
+    for article_id, article in code.items():
+        print(f"\n  [{article_id}] {article['name']}")
+        print(f"      {article['description']}")
+        if article["enforced_by"]:
+            enforcers = ", ".join(
+                penal_code.articles[pid].name for pid in article["enforced_by"]
+            )
+            print(f"      Enforced by (Penal Code): {enforcers}")
+        else:
+            print(f"      Enforced by: no Penal Code article covers this yet.")
 
 
 def update_standing_orders():
@@ -1236,6 +1322,7 @@ def show_help():
     print("  labs                          - Show Collegium laboratories, their roles, and current multipliers")
     print("  build_lab                     - Construct the Collegium's next laboratory")
     print("  docket                        - Show the Directorate Penal Code and filed records")
+    print("  code                          - Show the five-article Directorate Code")
     print("  council                       - Show the Directorate Council, Branches A-K, and the Vigil")
     print("  orders                        - Show Standing Orders and current equipment status")
     print("  charge <name> <article_id>    - Sentence <name> under a Penal Code article")
@@ -1284,6 +1371,8 @@ def main():
             handle_build_lab()
         elif command == "docket":
             show_docket()
+        elif command == "code":
+            show_directorate_code()
         elif command == "council":
             show_council()
         elif command == "orders":
