@@ -846,6 +846,39 @@ def update_earth():
     )
 
 
+def withdraw_above_reserve(location, resource, reserve, capacity):
+    """Withdraw up to `capacity` units of `resource` from `location`,
+    never dropping its stock below `reserve`. Returns the amount
+    actually withdrawn (may be less than `capacity` if there isn't that
+    much surplus). Mutates `location` in place.
+
+    Added 2026-09-07 as the first piece of a shared resource-transfer
+    path (audit section 6.1's recommendation): the freighter loop's
+    Earth pickup and Mars pickup were previously two separately
+    hand-written copies of the exact same "never drain below a reserve
+    floor" arithmetic (see FREIGHTER_METAL_PICKUP_RESERVE's and
+    EARTH_SUPPORT_SUPPLIES_RESERVE's own comments for why that floor
+    exists at each location) -- one audited function now backs both,
+    and any future pickup-style system (a second freight route, a
+    colony-to-colony transfer) gets the reserve-respecting behavior for
+    free instead of needing to reimplement it correctly.
+    """
+    available = max(0.0, location[resource] - reserve)
+    amount = min(capacity, available)
+    location[resource] -= amount
+    return amount
+
+
+def deposit(location, resource, amount):
+    """Add `amount` of `resource` into `location`. Added alongside
+    withdraw_above_reserve() (see its docstring) as the single audited
+    path a delivery should go through, instead of every delivery site
+    (freighter unload, tithe convoy arrival, and any future one) writing
+    its own `location[resource] += amount`.
+    """
+    location[resource] += amount
+
+
 def update_freighters():
     """Run one logistics step for every freighter in `world["ships"]`.
 
@@ -882,9 +915,9 @@ def update_freighters():
             # Mirrors FREIGHTER_METAL_PICKUP_RESERVE's pattern at Mars: never
             # load Earth down below its own reserve floor, even if the ship
             # has room to carry more.
-            available_for_pickup = max(0, earth["support_supplies"] - EARTH_SUPPORT_SUPPLIES_RESERVE)
-            load_amount = min(ship["cargo_capacity"], available_for_pickup)
-            earth["support_supplies"] -= load_amount
+            load_amount = withdraw_above_reserve(
+                earth, "support_supplies", EARTH_SUPPORT_SUPPLIES_RESERVE, ship["cargo_capacity"]
+            )
             ship["cargo_support_supplies"] = load_amount
             ship["status"] = "transit_to_mars"
             ship["travel_remaining"] = TRAVEL_TIME_STEPS
@@ -895,7 +928,7 @@ def update_freighters():
             if ship["travel_remaining"] <= 0:
                 mars = world["locations"]["mars"]
                 delivered = ship["cargo_support_supplies"]
-                mars["support_supplies"] += delivered
+                deposit(mars, "support_supplies", delivered)
                 ship["cargo_support_supplies"] = 0
                 ship["status"] = "idle_at_mars"
                 print(f"{ship['name']} arrived at Mars and unloaded {delivered} support supplies.")
@@ -904,9 +937,9 @@ def update_freighters():
 
         elif ship["status"] == "idle_at_mars":
             mars = world["locations"]["mars"]
-            available_for_pickup = max(0, mars["refined_metal"] - FREIGHTER_METAL_PICKUP_RESERVE)
-            load_amount = min(ship["cargo_capacity"], available_for_pickup)
-            mars["refined_metal"] -= load_amount
+            load_amount = withdraw_above_reserve(
+                mars, "refined_metal", FREIGHTER_METAL_PICKUP_RESERVE, ship["cargo_capacity"]
+            )
             ship["cargo_refined_metal"] = load_amount
             ship["status"] = "transit_to_earth"
             ship["travel_remaining"] = TRAVEL_TIME_STEPS
@@ -917,7 +950,7 @@ def update_freighters():
             if ship["travel_remaining"] <= 0:
                 earth = world["locations"]["earth"]
                 delivered = ship["cargo_refined_metal"]
-                earth["refined_metal"] += delivered
+                deposit(earth, "refined_metal", delivered)
                 ship["cargo_refined_metal"] = 0
                 ship["status"] = "idle_at_earth"
                 print(f"{ship['name']} arrived at Earth and delivered {delivered} refined metal.")
@@ -2764,8 +2797,8 @@ def update_tithe_convoys():
     for convoy in world["tithe_convoys"]:
         convoy["steps_remaining"] -= 1
         if convoy["steps_remaining"] <= 0:
-            mars["refined_metal"] += convoy["refined_metal"]
-            mars["raw_metal"] += convoy["raw_metal"]
+            deposit(mars, "refined_metal", convoy["refined_metal"])
+            deposit(mars, "raw_metal", convoy["raw_metal"])
             print(
                 f"Tithe convoy from '{convoy['colony_name']}' arrives at Mars: "
                 f"{convoy['refined_metal']:.1f} refined metal, {convoy['raw_metal']:.1f} raw metal delivered."

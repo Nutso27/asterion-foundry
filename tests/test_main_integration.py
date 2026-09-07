@@ -1921,5 +1921,66 @@ class StandingOrdersIntegrationTests(unittest.TestCase):
         game.show_standing_orders()  # now with one logged action
 
 
+class ResourceTransferHelperIntegrationTests(unittest.TestCase):
+    """Direct coverage for withdraw_above_reserve()/deposit() -- the
+    2026-09-07 shared resource-transfer helpers extracted from the
+    freighter loop's and tithe convoys' previously-duplicated pickup/
+    delivery arithmetic. The freighter and tithe convoy test classes
+    above already exercise these indirectly; these tests cover the
+    helpers' own edge cases directly, since they're now a piece of
+    shared infrastructure other systems are expected to build on.
+    """
+
+    def setUp(self):
+        self.location = {"support_supplies": 0.0, "refined_metal": 0.0}
+
+    def test_withdraws_up_to_capacity_when_surplus_is_plentiful(self):
+        self.location["refined_metal"] = 1000.0
+        amount = game.withdraw_above_reserve(self.location, "refined_metal", reserve=60.0, capacity=200.0)
+        self.assertEqual(amount, 200.0)
+        self.assertEqual(self.location["refined_metal"], 800.0)
+
+    def test_withdraws_only_the_surplus_above_reserve_when_capacity_exceeds_it(self):
+        self.location["refined_metal"] = 100.0
+        amount = game.withdraw_above_reserve(self.location, "refined_metal", reserve=60.0, capacity=200.0)
+        self.assertEqual(amount, 40.0)
+        self.assertEqual(self.location["refined_metal"], 60.0)
+
+    def test_withdraws_nothing_when_at_or_below_reserve(self):
+        self.location["refined_metal"] = 60.0
+        amount = game.withdraw_above_reserve(self.location, "refined_metal", reserve=60.0, capacity=200.0)
+        self.assertEqual(amount, 0.0)
+        self.assertEqual(self.location["refined_metal"], 60.0)
+
+        self.location["refined_metal"] = 10.0
+        amount = game.withdraw_above_reserve(self.location, "refined_metal", reserve=60.0, capacity=200.0)
+        self.assertEqual(amount, 0.0)
+        self.assertEqual(self.location["refined_metal"], 10.0)
+
+    def test_never_withdraws_below_zero_capacity(self):
+        self.location["refined_metal"] = 1000.0
+        amount = game.withdraw_above_reserve(self.location, "refined_metal", reserve=60.0, capacity=0.0)
+        self.assertEqual(amount, 0.0)
+        self.assertEqual(self.location["refined_metal"], 1000.0)
+
+    def test_deposit_adds_to_existing_stock(self):
+        self.location["support_supplies"] = 50.0
+        game.deposit(self.location, "support_supplies", 25.0)
+        self.assertEqual(self.location["support_supplies"], 75.0)
+
+    def test_deposit_of_zero_is_a_no_op(self):
+        self.location["support_supplies"] = 50.0
+        game.deposit(self.location, "support_supplies", 0.0)
+        self.assertEqual(self.location["support_supplies"], 50.0)
+
+    def test_withdraw_then_deposit_round_trips_exactly(self):
+        source = {"refined_metal": 500.0}
+        destination = {"refined_metal": 0.0}
+        amount = game.withdraw_above_reserve(source, "refined_metal", reserve=60.0, capacity=200.0)
+        game.deposit(destination, "refined_metal", amount)
+        self.assertEqual(source["refined_metal"], 300.0)
+        self.assertEqual(destination["refined_metal"], 200.0)
+
+
 if __name__ == "__main__":
     unittest.main()
