@@ -282,7 +282,27 @@ zero new state) — it was the only wired seat with none at all.
   now has a clean in-universe home — no code change needed, just the
   narrative catching up to what was already built.
 
-## 🔴 Flagged 2026-09-04: this doc assumes a xenology tech lane that isn't in the actual repo
+## Resolved 2026-09-07: xenology tech lane built (was flagged 2026-09-04 as claimed-but-missing)
+
+The 2026-09-04 audit's flag below (kept for history) found the lane
+completely absent. It now exists for real: a fifth `xenology` lane in
+`technologies.json` with three nodes, plus a genuine evidence-gating
+mechanism (`TechNode.evidence_required` / `ResearchState.evidence_banked`
+/ `engine.add_evidence()`) that didn't exist in the engine at all before
+this session — the earlier claimed work this entry originally flagged
+was never actually built, evidence-gating included, regardless of
+whether it was ever committed anywhere. `tests/test_research.py`'s lane
+count assertion is renamed `test_exactly_five_lanes` and passing.
+Full design writeup: `docs/systems/research.md`'s new "Xenology lane and
+evidence-gating" section — including the specific assumption made about
+which of the two readings below the unlock gate uses (both, deliberately
+— see that entry's update just below, kept rather than deleted so the
+history of what was uncertain stays visible).
+
+<details>
+<summary>Original 2026-09-04 flag (kept for history)</summary>
+
+Flagged 2026-09-04: this doc assumes a xenology tech lane that isn't in the actual repo
 
 A full codebase audit run this session found **no `xenology` lane
 anywhere** in `src/research/data/technologies.json`, `engine.py`, or
@@ -296,6 +316,8 @@ lane exists — **treat both as describing planned/claimed code, not
 actual code**, until the missing-work question resolves one way or the
 other.
 
+</details>
+
 ## Needs confirmation, not urgent
 
 - **Research lane naming** — the narrative's five Collegium branches
@@ -307,12 +329,19 @@ other.
   isn't identical (e.g. "Habitat & Life Support" vs.
   `biology_and_colonization`). Worth a deliberate check before treating
   them as interchangeable in future writing.
-- **Xenology's unlock gate** — narrative says the Xenology research path
-  is "explicitly locked behind completion of the salvage operation";
-  code gates the xenology lane on banked `xenos_fragments` evidence
-  instead. These could be the same gate described two ways (salvage
-  recovers fragments, fragments unlock the lane) or two different gates
-  — not confirmed.
+- **Xenology's unlock gate — assumption made, not confirmed (updated
+  2026-09-07).** Now that the lane actually exists (see the resolved
+  entry above), its first node (`xn_fragment_baseline_analysis`) gates
+  on **both** readings this entry originally raised: `xenos_fragments`
+  evidence (via `handle_study_fragments()`) **and** a real completed
+  tech node, `md_salvage_field_recovery`, chosen because its own flavor
+  text ("what looked like scrap starts yielding intact components and
+  data cores") reads as a strong match for "the salvage operation."
+  Applying both doesn't contradict either reading of the narrative line,
+  but it's still a judgment call this session made unilaterally — worth
+  confirming directly once Perplexity's fuller Cycle 4-29 recap syncs
+  in, in case it turns out to mean only one of the two, or something
+  else entirely.
 - **Directorate Code ↔ Penal Code enforcement mapping** — Requisition
   Authority and Chain of Command (constitutional articles) plausibly
   correspond to "Hoarding of Strategic Supply" and "Insubordination

@@ -68,7 +68,7 @@ import random
 from dataclasses import asdict
 
 from research import Lab, ResearchState, Scientist, load_technologies
-from research.engine import attempt_pilot_project, generate_rp, invest_rp, refresh_draw_pool
+from research.engine import add_evidence, attempt_pilot_project, generate_rp, invest_rp, refresh_draw_pool
 from research.lab_specialization import (
     FLEXIBLE_AUTO_RESEARCH,
     PERPETUAL_CONSTRUCTION_OPTIMIZATION,
@@ -2135,6 +2135,7 @@ def save_game():
         "completed": list(state.completed),  # set -> list, JSON has no set type
         "trial_log": [asdict(result) for result in state.trial_log],
         "dynamic_nodes": dynamic_nodes_save,
+        "evidence_banked": state.evidence_banked,
     }
 
     penal_records_save = [
@@ -2314,6 +2315,11 @@ def _apply_loaded_save(saved):
         state.rp_invested = r["rp_invested"]
         state.active_pool = r["active_pool"]
         state.completed = set(r["completed"])
+        # Backfill for a save made before evidence_banked existed (2026-09-07):
+        # default to 0, same "no evidence banked yet" state a fresh game
+        # starts in -- never a crash, and never silently inventing
+        # evidence the player didn't actually earn via study_fragments.
+        state.evidence_banked = r.get("evidence_banked", 0)
 
         # Defensive backfill for a save made before dynamic_nodes existed:
         # active_pool/completed can still name a dynamic node id with no
@@ -2466,9 +2472,32 @@ def _apply_loaded_save(saved):
 
 def handle_study_fragments():
     """Spend banked xenos fragments on a direct Collegium analysis pass.
-    Deliberately NOT wired into the research lane/tech-tree system --
-    that system has no xenology lane or evidence-gating mechanism yet.
-    This is a simpler, separate mechanic until that's built properly.
+
+    Wired into the research lane/tech-tree system as of 2026-09-07: this
+    is the sole way world["research"].evidence_banked ever increases,
+    which is what makes the xenology lane's evidence-gated first node
+    (xn_fragment_baseline_analysis, see TechNode.evidence_required)
+    reachable at all. Xenos fragments were seeded once at the cycle-29
+    sync with nothing that replenishes them, so at most one analysis is
+    ever possible in the current game -- by design, this call only ever
+    needs to bank 1 evidence, never more (see docs/systems/research.md's
+    xenology section for the full reasoning, including why every other
+    xenology node chains off this one via a normal prerequisite instead
+    of requiring further evidence that could never be banked).
+
+    Design decision made 2026-09-07, not previously confirmed by Ryan
+    (see lore/gaps.md's "Xenology's unlock gate" entry): the lane's
+    first node also requires md_salvage_field_recovery already
+    completed, on top of this evidence. gaps.md flagged two possible
+    readings of the narrative's "locked behind completion of the
+    salvage operation" -- the xenos_fragments evidence mechanic, or a
+    real salvage-related tech node -- without confirming either. Both
+    gates are applied here rather than picking one, since the existing
+    md_salvage_field_recovery node's own flavor text ("what looked like
+    scrap starts yielding intact components and data cores") reads as a
+    strong match for "the salvage operation," and requiring both doesn't
+    contradict the narrative's language either way. Worth confirming
+    directly if new Perplexity content clarifies which was meant.
     """
     if world["xenos_fragments"] < 3:
         print(f"Insufficient xenos fragments for analysis (have {world['xenos_fragments']}, need 3).")
@@ -2479,6 +2508,19 @@ def handle_study_fragments():
         "Construction methods are unlike anything in the Directorate's own engineering tradition -- "
         "confirmed non-human origin, but no further conclusions can yet be drawn."
     )
+    state = world["research"]
+    add_evidence(state, 1)
+    refresh_draw_pool(state, "xenology", guaranteed_ids={"xn_fragment_baseline_analysis"})
+    if "xn_fragment_baseline_analysis" in state.active_pool.get("xenology", []):
+        log_event(
+            "Xenology: fragment analysis complete. 'Fragment Baseline Analysis' is now available for "
+            "research under the xenology lane."
+        )
+    elif "xn_fragment_baseline_analysis" not in state.completed:
+        log_event(
+            "Xenology: fragment analysis complete and evidence banked, but 'Fragment Baseline Analysis' "
+            "still requires Salvage Field Recovery Doctrine researched first."
+        )
 
 
 def handle_survey(args):

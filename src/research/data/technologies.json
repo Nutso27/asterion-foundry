@@ -19,6 +19,11 @@
       "id": "military_doctrine",
       "name": "Military Doctrine",
       "description": "Weapon systems, defense grids, and fleet doctrine \u2014 research that keeps the Directorate's ships intact and its enemies from staying that way."
+    },
+    {
+      "id": "xenology",
+      "name": "Xenology",
+      "description": "Study of recovered non-human artifacts and construction methods. Every node in this lane is gated behind evidence banked from direct fragment analysis, on top of its normal prerequisites -- see docs/systems/research.md."
     }
   ],
   "nodes": [
@@ -344,6 +349,70 @@
       "pilot_base_success_chance": 0.18,
       "pilot_partial_progress_pct": 0.3,
       "pilot_funding_rp": 70.0
+    },
+    {
+      "id": "xn_fragment_baseline_analysis",
+      "name": "Fragment Baseline Analysis",
+      "lane": "xenology",
+      "tier": 1,
+      "prerequisites": [
+        "md_salvage_field_recovery"
+      ],
+      "evidence_required": 1,
+      "rp_cost": 70,
+      "draw_weight": 2.5,
+      "effect": {
+        "salvage_yield_multiplier": 1.1
+      },
+      "flavor_text": "The Collegium's first formal comparison of the recovered fragments against the Directorate's own alloys and joinery -- construction methods unlike anything in the Directorate's own engineering tradition, confirmed non-human origin. What can be learned from the comparison alone already sharpens what Salvage Field Recovery crews know to look for.",
+      "mutually_exclusive_with": [],
+      "pilot_project_enabled": false,
+      "pilot_base_success_chance": 0.15,
+      "pilot_partial_progress_pct": 0.25,
+      "pilot_funding_rp": 0.0
+    },
+    {
+      "id": "xn_comparative_hull_metallurgy",
+      "name": "Comparative Hull Metallurgy",
+      "lane": "xenology",
+      "tier": 2,
+      "prerequisites": [
+        "xn_fragment_baseline_analysis"
+      ],
+      "evidence_required": 0,
+      "rp_cost": 120,
+      "draw_weight": 1.8,
+      "effect": {
+        "hull_integrity_multiplier": 1.08
+      },
+      "flavor_text": "Cross-sectioning the recovered plating against Stress Lattice Theory's own models turns up a structural principle the Directorate had not considered -- adapted, not copied, into Collegium hull designs.",
+      "mutually_exclusive_with": [],
+      "pilot_project_enabled": true,
+      "pilot_base_success_chance": 0.15,
+      "pilot_partial_progress_pct": 0.3,
+      "pilot_funding_rp": 55
+    },
+    {
+      "id": "xn_countermeasure_doctrine",
+      "name": "Xenotech Countermeasure Doctrine",
+      "lane": "xenology",
+      "tier": 3,
+      "prerequisites": [
+        "xn_comparative_hull_metallurgy"
+      ],
+      "evidence_required": 0,
+      "rp_cost": 170,
+      "draw_weight": 1.2,
+      "effect": {
+        "unlocks_defense": "xenotech_hardened_plating",
+        "incoming_fire_reduction": 0.06
+      },
+      "flavor_text": "Understanding an unknown design well enough to reinforce Directorate hulls against whatever produced it -- Point Defense Grids doctrine, updated with what the fragments taught the Collegium.",
+      "mutually_exclusive_with": [],
+      "pilot_project_enabled": false,
+      "pilot_base_success_chance": 0.15,
+      "pilot_partial_progress_pct": 0.25,
+      "pilot_funding_rp": 0.0
     }
   ]
 }

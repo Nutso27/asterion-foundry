@@ -68,6 +68,11 @@ class ResearchState:
     active_pool: dict[str, list[str]] = field(default_factory=dict)
     completed: set[str] = field(default_factory=set)
     trial_log: list[PilotProjectResult] = field(default_factory=list)
+    evidence_banked: int = 0
+    """Non-physical, non-RP resource gating xenology-lane nodes with
+    evidence_required > 0 (see TechNode.evidence_required). Distinct
+    from any physical resource -- incremented by add_evidence(), not by
+    RP generation or a lab/scientist assignment."""
 
     @classmethod
     def new_game_start(cls, data_path: Path = DEFAULT_DATA_PATH) -> "ResearchState":
@@ -151,8 +156,9 @@ def generate_rp(state: ResearchState, dt: float = 1.0) -> dict[str, float]:
 
 def _is_eligible(state: ResearchState, node: TechNode) -> bool:
     """A node can appear in the discovery pool if its prerequisites are
-    met, it is not already completed, and no mutually-exclusive
-    alternative has already been chosen.
+    met, it is not already completed, no mutually-exclusive alternative
+    has already been chosen, and (for xenology-lane nodes) enough
+    evidence is banked -- see TechNode.evidence_required.
     """
     if node.id in state.completed:
         return False
@@ -160,7 +166,22 @@ def _is_eligible(state: ResearchState, node: TechNode) -> bool:
         return False
     if any(alt in state.completed for alt in node.mutually_exclusive_with):
         return False
+    if node.evidence_required > state.evidence_banked:
+        return False
     return True
+
+
+def add_evidence(state: ResearchState, amount: int = 1) -> int:
+    """Bank `amount` evidence toward evidence_required gates (see
+    TechNode.evidence_required). Returns the new evidence_banked total.
+    Does not itself refresh any lane's discovery pool -- a caller whose
+    action just crossed a gate should call refresh_draw_pool() for the
+    xenology lane afterward, passing the newly-eligible node's id as a
+    guaranteed_id so it can't be silently dropped by the very next draw
+    (see refresh_draw_pool()'s own docstring for why that matters).
+    """
+    state.evidence_banked += amount
+    return state.evidence_banked
 
 
 def refresh_draw_pool(

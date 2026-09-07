@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from research import Lab, ResearchState, Scientist, load_technologies  # noqa: E402
 from research.engine import (  # noqa: E402
+    add_evidence,
     attempt_pilot_project,
     calculate_pilot_success_chance,
     generate_rp,
@@ -35,13 +36,14 @@ class TechnologyDataTests(unittest.TestCase):
     def test_at_least_ten_technologies(self):
         self.assertGreaterEqual(len(self.nodes), 10)
 
-    def test_exactly_four_lanes(self):
-        self.assertEqual(len(self.lanes), 4)
+    def test_exactly_five_lanes(self):
+        self.assertEqual(len(self.lanes), 5)
         expected = {
             "physics_and_materials",
             "logistics_and_industry",
             "biology_and_colonization",
             "military_doctrine",
+            "xenology",
         }
         self.assertEqual(set(self.lanes.keys()), expected)
 
@@ -260,6 +262,70 @@ class PilotProjectTests(unittest.TestCase):
         self.assertIn("pm_focused_energy_emitters", self.state.completed)  # ...but it's done
         self.assertNotIn("pm_focused_energy_emitters", self.state.rp_invested)  # cleared on completion
         self.assertIn("completed via", result.note)
+
+
+class EvidenceGatingIntegrationTests(unittest.TestCase):
+    """Coverage for the xenology lane's evidence-gating mechanism
+    (TechNode.evidence_required / ResearchState.evidence_banked /
+    add_evidence()) -- added 2026-09-07, resolving the gap
+    lore/gaps.md flagged where no xenology lane existed at all.
+    """
+
+    def setUp(self):
+        self.state = ResearchState.new_game_start()
+
+    def test_xenology_node_absent_from_pool_with_no_evidence_banked(self):
+        self.state.rp_stockpile["military_doctrine"] = 1000.0
+        invest_rp(self.state, "md_point_defense_grids", 1000.0)
+        self.state.rp_stockpile["military_doctrine"] = 1000.0
+        invest_rp(self.state, "md_salvage_field_recovery", 1000.0)
+        pool = refresh_draw_pool(self.state, "xenology", guaranteed_ids={"xn_fragment_baseline_analysis"})
+        self.assertNotIn("xn_fragment_baseline_analysis", pool)
+
+    def test_xenology_node_absent_from_pool_with_evidence_but_no_prerequisite(self):
+        add_evidence(self.state, 1)
+        pool = refresh_draw_pool(self.state, "xenology", guaranteed_ids={"xn_fragment_baseline_analysis"})
+        self.assertNotIn("xn_fragment_baseline_analysis", pool)
+
+    def test_xenology_node_appears_once_both_evidence_and_prerequisite_are_met(self):
+        self.state.rp_stockpile["military_doctrine"] = 1000.0
+        invest_rp(self.state, "md_point_defense_grids", 1000.0)
+        self.state.rp_stockpile["military_doctrine"] = 1000.0
+        invest_rp(self.state, "md_salvage_field_recovery", 1000.0)
+        add_evidence(self.state, 1)
+        pool = refresh_draw_pool(self.state, "xenology", guaranteed_ids={"xn_fragment_baseline_analysis"})
+        self.assertIn("xn_fragment_baseline_analysis", pool)
+
+    def test_add_evidence_returns_the_new_total(self):
+        self.assertEqual(add_evidence(self.state, 1), 1)
+        self.assertEqual(add_evidence(self.state, 2), 3)
+
+    def test_downstream_xenology_nodes_need_no_additional_evidence(self):
+        """xn_comparative_hull_metallurgy and xn_countermeasure_doctrine
+        both have evidence_required=0 -- they chain off a normal
+        prerequisite once the lane's evidence gate is cleared once,
+        since xenos_fragments can never be replenished (see
+        handle_study_fragments()'s docstring) and no node should be an
+        unreachable dead end.
+        """
+        self.assertEqual(self.state.nodes["xn_comparative_hull_metallurgy"].evidence_required, 0)
+        self.assertEqual(self.state.nodes["xn_countermeasure_doctrine"].evidence_required, 0)
+
+    def test_completing_the_gated_node_still_requires_its_own_rp_cost(self):
+        self.state.rp_stockpile["military_doctrine"] = 1000.0
+        invest_rp(self.state, "md_point_defense_grids", 1000.0)
+        self.state.rp_stockpile["military_doctrine"] = 1000.0
+        invest_rp(self.state, "md_salvage_field_recovery", 1000.0)
+        add_evidence(self.state, 1)
+
+        node = self.state.nodes["xn_fragment_baseline_analysis"]
+        self.state.rp_stockpile["xenology"] = node.rp_cost - 10.0
+        invest_rp(self.state, "xn_fragment_baseline_analysis", node.rp_cost - 10.0)
+        self.assertNotIn("xn_fragment_baseline_analysis", self.state.completed)
+
+        self.state.rp_stockpile["xenology"] = 10.0
+        invest_rp(self.state, "xn_fragment_baseline_analysis", 10.0)
+        self.assertIn("xn_fragment_baseline_analysis", self.state.completed)
 
 
 if __name__ == "__main__":

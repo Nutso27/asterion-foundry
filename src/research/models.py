@@ -38,6 +38,13 @@ class TechNode:
     ``effect`` must describe a concrete, measurable change to what the
     Directorate can build, move, or fight with. A node with an empty or
     cosmetic-only effect should not exist in the data file.
+
+    ``evidence_required`` is a non-RP gate on top of ``prerequisites``:
+    the node cannot enter a lane's discovery pool until
+    ``ResearchState.evidence_banked`` reaches this value, regardless of
+    RP or completed prerequisites. 0 (the default) means no evidence
+    gate -- every node outside the xenology lane. See
+    docs/systems/research.md's xenology section for why this exists.
     """
 
     id: str
@@ -54,6 +61,7 @@ class TechNode:
     pilot_base_success_chance: float = 0.15
     pilot_partial_progress_pct: float = 0.25
     pilot_funding_rp: float = 0.0
+    evidence_required: int = 0
 
 
 @dataclass

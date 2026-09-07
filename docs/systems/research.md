@@ -138,6 +138,57 @@ deliberate player choice:
 - Only one lab and one scientist exist at game start; building/hiring
   more is future work, not part of this integration.
 
+## Xenology lane and evidence-gating (added 2026-09-07)
+
+A fifth lane, `xenology`, exists alongside the original four. It is
+gated differently from every other lane: its first node,
+`xn_fragment_baseline_analysis`, requires `TechNode.evidence_required`
+evidence banked in `ResearchState.evidence_banked`, on top of a normal
+`prerequisites` entry — neither gate alone is sufficient.
+
+**Why two gates.** `lore/gaps.md`'s "Xenology's unlock gate" entry
+flagged that the narrative describes the lane as "explicitly locked
+behind completion of the salvage operation," without confirming whether
+that meant the existing `xenos_fragments` evidence mechanic, a real
+salvage-related tech node, or both. This implementation applies both:
+`xn_fragment_baseline_analysis` requires `md_salvage_field_recovery`
+(military_doctrine) already completed, **and** at least 1 evidence
+banked. `md_salvage_field_recovery`'s own flavor text — "what looked
+like scrap starts yielding intact components and data cores" — reads as
+a strong match for "the salvage operation" described narratively, and
+requiring both doesn't contradict either reading. **This is an
+assumption, not a confirmed design decision** — worth checking directly
+against Perplexity's fuller Cycle 4-29 recap once that syncs in.
+
+**How evidence gets banked.** `handle_study_fragments()` in `main.py` is
+the only place `ResearchState.evidence_banked` ever increases —
+one call banks 1 evidence and spends 3 `xenos_fragments`. Since
+`xenos_fragments` was seeded once at the cycle-29 sync with nothing that
+replenishes it, at most one analysis (and so at most 1 evidence) is ever
+obtainable in the current game. This is exactly why only the lane's
+first node is evidence-gated at all: every other xenology node
+(`xn_comparative_hull_metallurgy`, `xn_countermeasure_doctrine`) chains
+off a normal `prerequisites` entry instead of requiring further
+evidence that could never be banked — consistent with this module's own
+"no node in the data file is a dead end" rule.
+
+**Mechanically**, `xn_fragment_baseline_analysis` stacks a
+`salvage_yield_multiplier` on top of `md_salvage_field_recovery`'s own
+(both apply via `_completed_effect_multiplier` in `main.py`, which
+multiplies every completed node's matching effect key together);
+`xn_comparative_hull_metallurgy` stacks `hull_integrity_multiplier` the
+same way `pm_stress_lattice_theory` does; `xn_countermeasure_doctrine`
+uses the same `unlocks_defense`/`incoming_fire_reduction` effect shape
+`md_point_defense_grids` already established. None of the three are a
+new mechanical category — they extend existing multiplier chains rather
+than introducing bespoke, one-off logic.
+
+**Not addressed by this work:** the Directorate Code's `Xenos Contact
+Protocol` article (still has no Penal Code enforcement, per
+`lore/gaps.md`'s "lore ahead of code" section) and any deeper first-
+contact/diplomacy mechanic — both explicitly out of `DESIGN_SPINE.md`'s
+scope for now.
+
 ## Success condition
 
 `python -m unittest tests/test_research.py -v` passes, `python src/research/demo.py`

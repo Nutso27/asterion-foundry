@@ -10,7 +10,7 @@ See ``docs/systems/research.md`` for the full design write-up and
 """
 
 from .models import Lab, PilotProjectResult, Scientist, TechLane, TechNode
-from .engine import ResearchState, load_technologies
+from .engine import ResearchState, add_evidence, load_technologies
 
 __all__ = [
     "Lab",
@@ -19,5 +19,6 @@ __all__ = [
     "TechLane",
     "TechNode",
     "ResearchState",
+    "add_evidence",
     "load_technologies",
 ]

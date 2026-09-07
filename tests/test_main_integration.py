@@ -2078,5 +2078,104 @@ class EventLogIntegrationTests(unittest.TestCase):
             shutil.rmtree(tmp_dir)
 
 
+class XenologyEvidenceWiringIntegrationTests(unittest.TestCase):
+    """Coverage for handle_study_fragments()'s 2026-09-07 wiring into the
+    research system's evidence-gating mechanism -- previously a
+    standalone flavor event with no tie to research/technologies.json
+    at all (see lore/gaps.md's now-resolved "xenology lane" flag).
+    """
+
+    def setUp(self):
+        game.world["xenos_fragments"] = 3
+        game.world["research"] = game.build_research_state()
+        game.world["events"] = []
+
+    def test_study_fragments_banks_one_evidence(self):
+        game.handle_study_fragments()
+        self.assertEqual(game.world["research"].evidence_banked, 1)
+
+    def test_study_fragments_consumes_exactly_three_fragments(self):
+        game.handle_study_fragments()
+        self.assertEqual(game.world["xenos_fragments"], 0)
+
+    def test_insufficient_fragments_banks_no_evidence(self):
+        game.world["xenos_fragments"] = 2
+        game.handle_study_fragments()
+        self.assertEqual(game.world["research"].evidence_banked, 0)
+
+    def test_node_does_not_surface_without_the_salvage_prerequisite(self):
+        game.handle_study_fragments()
+        pool = game.world["research"].active_pool.get("xenology", [])
+        self.assertNotIn("xn_fragment_baseline_analysis", pool)
+
+    def test_node_surfaces_once_salvage_doctrine_is_already_completed(self):
+        state = game.world["research"]
+        state.rp_stockpile["military_doctrine"] = 1000.0
+        game.invest_rp(state, "md_point_defense_grids", 1000.0)
+        state.rp_stockpile["military_doctrine"] = 1000.0
+        game.invest_rp(state, "md_salvage_field_recovery", 1000.0)
+
+        game.handle_study_fragments()
+        pool = state.active_pool.get("xenology", [])
+        self.assertIn("xn_fragment_baseline_analysis", pool)
+
+    def test_availability_is_logged_as_an_event_when_the_node_surfaces(self):
+        state = game.world["research"]
+        state.rp_stockpile["military_doctrine"] = 1000.0
+        game.invest_rp(state, "md_point_defense_grids", 1000.0)
+        state.rp_stockpile["military_doctrine"] = 1000.0
+        game.invest_rp(state, "md_salvage_field_recovery", 1000.0)
+
+        game.handle_study_fragments()
+        self.assertTrue(any(
+            "Fragment Baseline Analysis' is now available" in e["text"] for e in game.world["events"]
+        ))
+
+    def test_still_locked_message_is_logged_when_prerequisite_is_missing(self):
+        game.handle_study_fragments()
+        self.assertTrue(any(
+            "still requires Salvage Field Recovery Doctrine" in e["text"] for e in game.world["events"]
+        ))
+
+    def test_evidence_banked_round_trips_through_save_and_load(self):
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            save_path = os.path.join(tmp_dir, "state.json")
+            original_save_file = game.SAVE_FILE
+            game.SAVE_FILE = save_path
+            try:
+                game.handle_study_fragments()
+                game.save_game()
+                game.world["research"] = game.build_research_state()
+                game.load_game()
+                self.assertEqual(game.world["research"].evidence_banked, 1)
+            finally:
+                game.SAVE_FILE = original_save_file
+        finally:
+            shutil.rmtree(tmp_dir)
+
+    def test_a_pre_evidence_save_backfills_to_zero_without_crashing(self):
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            save_path = os.path.join(tmp_dir, "state.json")
+            original_save_file = game.SAVE_FILE
+            game.SAVE_FILE = save_path
+            try:
+                game.save_game()
+                with open(save_path) as f:
+                    saved = json.load(f)
+                del saved["research"]["evidence_banked"]  # simulate a pre-fix save
+                with open(save_path, "w") as f:
+                    json.dump(saved, f)
+
+                game.world["research"] = game.build_research_state()
+                game.load_game()
+                self.assertEqual(game.world["research"].evidence_banked, 0)
+            finally:
+                game.SAVE_FILE = original_save_file
+        finally:
+            shutil.rmtree(tmp_dir)
+
+
 if __name__ == "__main__":
     unittest.main()
