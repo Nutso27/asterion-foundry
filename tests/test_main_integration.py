@@ -1811,5 +1811,115 @@ class DynamicNodePersistentGuaranteeIntegrationTests(unittest.TestCase):
             )
 
 
+class StandingOrdersIntegrationTests(unittest.TestCase):
+    """Coverage for the equipment-and-asset-upgrades standing order
+    (update_standing_orders()/show_standing_orders()) -- previously the
+    only system in main.py's own docstring system table with zero
+    automated tests, per the 2026-09-04 audit's coverage section.
+    """
+
+    def setUp(self):
+        game.world["locations"]["mars"]["refined_metal"] = 0.0
+        game.world["equipment_status"] = {
+            "frontline_combat": {"tier_index": 0, "tiers": [
+                "Standard issue", "Reinforced-pattern armor and weapon mounts",
+                "Forge-tempered plating, upgraded fire-control", "Collegium-pattern advanced war matériel",
+            ]},
+            "industrial": {"tier_index": 0, "tiers": [
+                "Standard issue", "Reinforced extraction and refinery tooling",
+                "Automated forge-line hardware", "Collegium-pattern advanced industrial systems",
+            ]},
+            "administrative_personal": {"tier_index": 0, "tiers": [
+                "Standard issue", "Improved personal gear and office equipment",
+                "Forge-tempered personal kit", "Collegium-pattern advanced administrative systems",
+            ]},
+        }
+        game.world["standing_orders"]["equipment_and_asset_upgrades"]["log"] = []
+
+    def test_no_upgrade_when_metal_at_or_below_reserve(self):
+        game.world["locations"]["mars"]["refined_metal"] = game.EQUIPMENT_METAL_RESERVE
+        game.update_standing_orders()
+        self.assertEqual(game.world["equipment_status"]["frontline_combat"]["tier_index"], 0)
+        self.assertEqual(len(game.world["standing_orders"]["equipment_and_asset_upgrades"]["log"]), 0)
+
+    def test_surplus_above_reserve_and_cost_funds_frontline_first(self):
+        game.world["locations"]["mars"]["refined_metal"] = (
+            game.EQUIPMENT_METAL_RESERVE + game.EQUIPMENT_UPGRADE_COST
+        )
+        game.update_standing_orders()
+        self.assertEqual(game.world["equipment_status"]["frontline_combat"]["tier_index"], 1)
+        self.assertEqual(game.world["equipment_status"]["industrial"]["tier_index"], 0)
+        self.assertEqual(game.world["equipment_status"]["administrative_personal"]["tier_index"], 0)
+
+    def test_exactly_one_upgrade_per_call_even_with_metal_for_several(self):
+        game.world["locations"]["mars"]["refined_metal"] = (
+            game.EQUIPMENT_METAL_RESERVE + game.EQUIPMENT_UPGRADE_COST * 5
+        )
+        game.update_standing_orders()
+        total_tiers_advanced = sum(
+            status["tier_index"] for status in game.world["equipment_status"].values()
+        )
+        self.assertEqual(total_tiers_advanced, 1)
+
+    def test_cost_is_deducted_from_mars_refined_metal(self):
+        start = game.EQUIPMENT_METAL_RESERVE + game.EQUIPMENT_UPGRADE_COST + 10.0
+        game.world["locations"]["mars"]["refined_metal"] = start
+        game.update_standing_orders()
+        self.assertAlmostEqual(
+            game.world["locations"]["mars"]["refined_metal"], start - game.EQUIPMENT_UPGRADE_COST
+        )
+
+    def test_priority_order_moves_to_industrial_once_frontline_is_maxed(self):
+        game.world["equipment_status"]["frontline_combat"]["tier_index"] = 3  # already maxed
+        game.world["locations"]["mars"]["refined_metal"] = (
+            game.EQUIPMENT_METAL_RESERVE + game.EQUIPMENT_UPGRADE_COST
+        )
+        game.update_standing_orders()
+        self.assertEqual(game.world["equipment_status"]["industrial"]["tier_index"], 1)
+
+    def test_no_upgrade_left_to_fund_once_every_category_is_maxed(self):
+        for status in game.world["equipment_status"].values():
+            status["tier_index"] = 3
+        game.world["locations"]["mars"]["refined_metal"] = (
+            game.EQUIPMENT_METAL_RESERVE + game.EQUIPMENT_UPGRADE_COST * 5
+        )
+        before = game.world["locations"]["mars"]["refined_metal"]
+        game.update_standing_orders()
+        self.assertEqual(game.world["locations"]["mars"]["refined_metal"], before)
+        self.assertEqual(len(game.world["standing_orders"]["equipment_and_asset_upgrades"]["log"]), 0)
+
+    def test_each_upgrade_appends_one_log_entry_with_cycle_and_new_tier(self):
+        game.world["locations"]["mars"]["refined_metal"] = (
+            game.EQUIPMENT_METAL_RESERVE + game.EQUIPMENT_UPGRADE_COST
+        )
+        game.world["time"] = 42
+        game.update_standing_orders()
+        log = game.world["standing_orders"]["equipment_and_asset_upgrades"]["log"]
+        self.assertEqual(len(log), 1)
+        entry = log[0]
+        self.assertEqual(entry["effective_cycle"], 42)
+        self.assertEqual(entry["category"], "frontline_combat")
+        self.assertEqual(
+            entry["new_tier"], "Reinforced-pattern armor and weapon mounts"
+        )
+
+    def test_advance_world_itself_calls_update_standing_orders(self):
+        game.world["locations"]["mars"]["refined_metal"] = (
+            game.EQUIPMENT_METAL_RESERVE + game.EQUIPMENT_UPGRADE_COST + 200.0
+        )
+        game.advance_world()
+        self.assertEqual(
+            len(game.world["standing_orders"]["equipment_and_asset_upgrades"]["log"]), 1
+        )
+
+    def test_show_standing_orders_runs_without_error_on_a_fresh_and_partially_upgraded_state(self):
+        game.show_standing_orders()  # fresh: no logged actions yet
+        game.world["locations"]["mars"]["refined_metal"] = (
+            game.EQUIPMENT_METAL_RESERVE + game.EQUIPMENT_UPGRADE_COST
+        )
+        game.update_standing_orders()
+        game.show_standing_orders()  # now with one logged action
+
+
 if __name__ == "__main__":
     unittest.main()
