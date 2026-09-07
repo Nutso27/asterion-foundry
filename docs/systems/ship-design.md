@@ -43,6 +43,67 @@ available.
   freighters, `combat_rating` for light warships) — see "How to
   customize" below for where to add more.
 
+## Bugs found and fixed 2026-09-04 (stabilization pass)
+
+Two real bugs in the self-renewing MK progression loop, both confirmed
+with concrete repros, both closed with regression tests:
+
+- **The freshly-registered successor node could be silently dropped the
+  instant it appeared.** `_register_next_mk_node()` appends the new node
+  (e.g. `freighter_mark_iii`) into its lane's `active_pool`, but
+  `handle_invest()`/`handle_pilot()` immediately call
+  `refresh_draw_pool()` right after (to see what else completing this
+  node opened up) — and that function used to do a full weighted re-draw
+  with no special treatment for a node that had just been added with 0 RP
+  invested. It competed on equal footing with every other eligible
+  candidate for a (usually 3-slot) pool and could lose, despite the
+  player having just been told "New research now available." Confirmed
+  at roughly 1 in 6 trials. Fixed by adding a `guaranteed_ids` parameter
+  to `refresh_draw_pool()` (`src/research/engine.py`) — protected the
+  same way an already-in-progress node already was — and having
+  `_apply_ship_design_effect()` return the new node's id so
+  `handle_invest()`/`handle_pilot()` can pass it through.
+- **A dynamically-registered node didn't survive save/load, crashing
+  `research`/`invest`/`pilot` on the very next launch.** `save_game()`
+  only ever persisted the base technology set's mutable state
+  (`active_pool`, `completed`, `rp_invested`) — never the node
+  *definitions* themselves. A runtime-registered node like
+  `freighter_mark_iii` exists only in `state.nodes` in memory; on
+  `load_game()`, `state.nodes` gets rebuilt fresh from
+  `technologies.json` alone (which never had it), while `active_pool`
+  still names it — the next lookup on that id raised `KeyError`. This is
+  an ordinary sequence (complete an MK node, save, reload), not an edge
+  case. Fixed by saving every `state.nodes` entry not present in
+  `technologies.json` under a new `dynamic_nodes` key and restoring them
+  before `active_pool`/`completed` are applied on load; see
+  `docs/systems/shipyard.md`'s save/load bug note for the sibling fix
+  this shares its "reconstruct everything into locals before touching
+  `world`" pattern with.
+
+## Bug found and fixed 2026-09-05 (stress-test pass): a dynamic node's protection only covered its own registration, not later refreshes
+
+The 2026-09-04 fix (above) added `guaranteed_ids` to `refresh_draw_pool()`,
+but `handle_invest()`/`handle_pilot()` only ever passed the ID of the node
+just registered **this call** -- protecting it against exactly one
+refresh. Any *later*, unrelated completion in the same lane called
+`refresh_draw_pool()` with no `guaranteed_ids` for it at all, so a
+still-uninvested dynamic node from an earlier completion competed on equal
+footing with every other eligible candidate and could be silently evicted.
+Confirmed at ~16% (49/300 trials) for a completely ordinary sequence:
+complete an MK node, then complete two unrelated same-lane techs before
+ever touching the new one. The node wasn't lost forever (a later refresh
+could re-draw it), but it vanished from `research`/`invest`/`pilot` for an
+indeterminate stretch -- directly contradicting the "New research now
+available" message printed at registration.
+
+Fixed by `_guaranteed_dynamic_node_ids()` in `src/main.py`, which
+recomputes the full set of live dynamic node ids in a lane (anything in
+`active_pool` not present in the base `technologies.json` set) on **every**
+`refresh_draw_pool()` call from `handle_invest()`/`handle_pilot()`, not
+just the one right after registration -- so a dynamic node stays protected
+for its entire uninvested lifetime. Regression test:
+`tests/test_main_integration.py::DynamicNodePersistentGuaranteeIntegrationTests`.
+
 ## Integration into the game loop
 
 As of this integration, two research nodes make ship design a real,

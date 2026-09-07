@@ -33,7 +33,12 @@ Three mechanics, combined:
    (2-4 node), weighted-random selection of currently eligible nodes per
    lane — eligible meaning prerequisites are met, the node isn't
    completed, and no mutually-exclusive alternative has already been
-   taken. Nodes with RP already invested always stay visible.
+   taken. Nodes with RP already invested always stay visible, and so does
+   anything passed via the `guaranteed_ids` parameter (added 2026-09-04
+   as a bug fix — see `docs/systems/ship-design.md`'s "Bugs found and
+   fixed 2026-09-04" section: a node registered into a lane at runtime
+   with 0 RP invested could otherwise be silently dropped by the very
+   next refresh, the instant the player was told it was available).
 3. **R&D pipeline / risk layer.** `engine.attempt_pilot_project` lets a
    staffed, `pilot_project_enabled` node be gambled on: commit a chunk of
    banked RP now, roll against `calculate_pilot_success_chance`, and

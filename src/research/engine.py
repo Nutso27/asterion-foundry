@@ -168,6 +168,7 @@ def refresh_draw_pool(
     lane_id: str,
     pool_size: int = DEFAULT_POOL_SIZE,
     rng: random.Random | None = None,
+    guaranteed_ids: set[str] | None = None,
 ) -> list[str]:
     """Roll a new weighted-random selection of visible nodes for one lane.
 
@@ -175,17 +176,33 @@ def refresh_draw_pool(
     ``draw_weight``, up to ``pool_size`` (2-4 by design). Nodes already
     in progress (some RP invested) are always kept visible so the player
     is never in the middle of research and unable to keep funding it.
+
+    ``guaranteed_ids``, if given, are kept visible the same way in-progress
+    nodes are, on top of them. Bug found and fixed 2026-09-04: a node
+    registered into a lane at runtime with 0 RP invested (the self-renewing
+    MK successor project _register_next_mk_node() in main.py creates)
+    used to compete on equal footing with every other eligible node the
+    very next time this function ran -- which main.py's handle_invest()/
+    handle_pilot() always did right after registering it, to refresh the
+    pool for whatever ELSE completing that node may have unlocked. In
+    testing that meant the node could be silently absent from the pool
+    the instant it appeared, despite the player having just been told
+    "New research now available." Callers that just registered a node
+    should pass its id here so a fresh draw can't drop it before the
+    player ever sees it.
     """
     rng = rng or random.Random()
+    guaranteed_ids = guaranteed_ids or set()
     eligible = [n for n in state.nodes.values() if n.lane == lane_id and _is_eligible(state, n)]
 
-    in_progress_ids = {
-        n.id for n in eligible if state.rp_invested.get(n.id, 0.0) > 0.0
+    protected_ids = {
+        n.id for n in eligible
+        if state.rp_invested.get(n.id, 0.0) > 0.0 or n.id in guaranteed_ids
     }
-    pool = list(in_progress_ids)
+    pool = list(protected_ids)
 
     remaining_slots = max(pool_size - len(pool), 0)
-    candidates = [n for n in eligible if n.id not in in_progress_ids]
+    candidates = [n for n in eligible if n.id not in protected_ids]
 
     while remaining_slots > 0 and candidates:
         weights = [max(n.draw_weight, 0.01) for n in candidates]
@@ -324,17 +341,40 @@ def attempt_pilot_project(
         banked = funding * node.pilot_partial_progress_pct
         lost = funding - banked
         state.rp_invested[tech_id] = state.rp_invested.get(tech_id, 0.0) + banked
-        result = PilotProjectResult(
-            tech_id=tech_id,
-            success=False,
-            chance_used=chance,
-            rp_banked=banked,
-            rp_lost=lost,
-            note=(
-                f"Pilot project failed ({chance:.0%} chance). "
-                f"{banked:.1f} RP banked as partial progress, {lost:.1f} RP lost."
-            ),
-        )
+
+        # A failed pilot's partial banking can still push a node over its
+        # rp_cost if enough progress was already invested beforehand
+        # (e.g. via plain `invest`) -- only invest_rp() used to check that
+        # threshold, so a node could end up sitting at "fully funded" but
+        # never actually marked complete until the player invested again.
+        # Bug found and fixed 2026-09-04; regression test in
+        # tests/test_research.py.
+        if state.rp_invested[tech_id] >= node.rp_cost:
+            _complete_node(state, node)
+            result = PilotProjectResult(
+                tech_id=tech_id,
+                success=False,
+                chance_used=chance,
+                rp_banked=banked,
+                rp_lost=lost,
+                note=(
+                    f"Pilot project failed ({chance:.0%} chance), but {banked:.1f} RP of partial "
+                    f"progress was enough to complete {node.name} on its own — completed via "
+                    f"prior investment, not the pilot roll itself. {lost:.1f} RP lost."
+                ),
+            )
+        else:
+            result = PilotProjectResult(
+                tech_id=tech_id,
+                success=False,
+                chance_used=chance,
+                rp_banked=banked,
+                rp_lost=lost,
+                note=(
+                    f"Pilot project failed ({chance:.0%} chance). "
+                    f"{banked:.1f} RP banked as partial progress, {lost:.1f} RP lost."
+                ),
+            )
 
     state.trial_log.append(result)
     return result

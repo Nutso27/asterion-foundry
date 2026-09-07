@@ -150,6 +150,45 @@ class ResearchStateTests(unittest.TestCase):
         pool = refresh_draw_pool(self.state, "physics_and_materials", pool_size=2, rng=random.Random(0))
         self.assertLessEqual(len(pool), 2)
 
+    def test_guaranteed_ids_are_never_dropped_by_a_refresh(self):
+        """Regression test for a real bug: a node registered at runtime
+        with 0 RP invested (e.g. a freshly-unlocked MK successor project)
+        used to compete on equal footing with every other eligible node
+        the moment the pool was next refreshed, and could be silently
+        dropped despite the player just having been told it was
+        available. guaranteed_ids protects it the same way an
+        already-in-progress node is protected. Run across many seeds
+        (unprotected, this was observed to fail in ~1 of 6 trials) to
+        make sure this isn't a coincidence of one particular draw.
+        """
+        node_id = "pm_stress_lattice_theory"  # not yet eligible on its own (needs a prereq)
+        self.state.completed.add("pm_refined_alloy_process")  # ...so make it eligible now
+        # pool_size=1 against 2 equally-eligible candidates -- real
+        # competition, so this only proves something if guaranteed_ids
+        # is actually forcing the node in regardless of the draw.
+        for seed in range(30):
+            pool = refresh_draw_pool(
+                self.state, "physics_and_materials", pool_size=1,
+                rng=random.Random(seed), guaranteed_ids={node_id},
+            )
+            self.assertIn(node_id, pool, f"dropped on seed {seed}")
+
+    def test_without_guaranteed_ids_a_new_node_can_still_be_dropped(self):
+        """Sanity check that the test above is actually exercising the
+        bug's real conditions, not passing vacuously -- pool_size=1 with
+        two equally-eligible candidates and no guaranteed_ids must be
+        able to drop either one across enough seeds.
+        """
+        self.state.completed.add("pm_refined_alloy_process")
+        node_id = "pm_stress_lattice_theory"
+        dropped_at_least_once = any(
+            node_id not in refresh_draw_pool(
+                self.state, "physics_and_materials", pool_size=1, rng=random.Random(seed),
+            )
+            for seed in range(30)
+        )
+        self.assertTrue(dropped_at_least_once)
+
 
 class PilotProjectTests(unittest.TestCase):
     def setUp(self):
@@ -201,6 +240,26 @@ class PilotProjectTests(unittest.TestCase):
         self.assertGreater(result.rp_lost, 0.0)
         self.assertAlmostEqual(result.rp_banked + result.rp_lost, node.pilot_funding_rp, places=5)
         self.assertEqual(self.state.rp_invested["pm_focused_energy_emitters"], result.rp_banked)
+
+    def test_failed_pilot_still_completes_a_node_already_near_full_investment(self):
+        """Regression test for a real bug: only invest_rp() used to check
+        whether rp_invested had crossed rp_cost, so a failed pilot's
+        partial banking could push a node past its cost (if enough was
+        already invested beforehand via plain `invest`) without the node
+        ever actually being marked complete. Fixed 2026-09-04.
+        """
+        node = self.state.nodes["pm_focused_energy_emitters"]  # cost=100
+        invest_rp(self.state, "pm_focused_energy_emitters", 85.0)  # short of completing on its own
+        self.assertNotIn("pm_focused_energy_emitters", self.state.completed)
+
+        rng = random.Random()
+        rng.random = lambda: 0.99  # force the pilot roll itself to fail
+        result = attempt_pilot_project(self.state, "pm_focused_energy_emitters", "lab_1", rng=rng)
+
+        self.assertFalse(result.success)  # the roll failed...
+        self.assertIn("pm_focused_energy_emitters", self.state.completed)  # ...but it's done
+        self.assertNotIn("pm_focused_energy_emitters", self.state.rp_invested)  # cleared on completion
+        self.assertIn("completed via", result.note)
 
 
 if __name__ == "__main__":

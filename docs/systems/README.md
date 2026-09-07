@@ -16,6 +16,8 @@ This directory contains short design notes. Documentation is where large ideas l
 | Lab specialization (fixed vs. flexible labs) | Implemented and wired into the command loop (`build_lab`/`labs`) | `src/research/lab_specialization.py`, `src/main.py`, see `lab-specialization.md` |
 | Shipyard slot expansion and no-idle rotation | Implemented and wired into the command loop (`shipyard`) | `src/shipyard.py`, `src/main.py`, see `shipyard.md` |
 | Ship design (MK progression and retirement) | Implemented and wired into the command loop (`fleet`; advances via `invest`/`pilot`) | `src/ship_design.py`, `src/main.py`, see `ship-design.md` |
+| Colonies (survey/outpost/specialize) | Implemented and wired into the command loop (`survey`/`outpost`/`specialize`/`colonies`) | `src/main.py` |
+| Tithe System (Tithe Grades, shortfall/audit/Penal Code escalation, real travel time) | Implemented and wired into the command loop (`tithes`/`colonies`/`audit`/`council`) | `src/main.py`, see `tithe-system.md` |
 
 ## Customization quick reference
 
@@ -30,6 +32,7 @@ section — this table is just the fast lookup.
 | Shipyard slots | `world["shipyard"]`, `world["shipyard_slots"]` | `update_shipyard()`, `_complete_ship_build()`, `show_shipyard()` | `SHIPYARD_METAL_RESERVE`, `SLOT_EXPAND_COST`, `SHIPYARD_EXPAND_BATCH_SIZE`, `BASE_BUILD_TIME_STEPS` |
 | Lab specialization | `world["lab_roles"]`, `world["multipliers"]` | `update_lab_specialization()`, `handle_build_lab()`, `show_labs()` | `LAB_BUILD_COST`, `LAB_TICK_INTERVAL_STEPS`, `LAB_TICK_MAGNITUDE`, `LAB_TICK_FLOOR` |
 | Directorate Penal Code | `world["penal_code"]`, `world["penal_records"]` | `handle_charge()`, `handle_confirm_servitor()`, `show_docket()` | Articles/tiers are edited in `PenalCode.default_code()` in `src/penal_code.py`, not `main.py` |
+| Tithe System | `world["tithe_system"]`, `world["tithe_convoys"]`, `world["colonies"][...]["tithe_grade"/"tithe_shortfall_streak"/"distance_steps"]`, `world["audit_system"]["active_concealments"]` | `update_tithes()`, `update_tithe_convoys()`, `_tithe_grade_level()`, `show_tithes()` | `TITHE_ELIGIBLE_SPECIALIZATIONS`, `TITHE_GRADE_BASE_BY_SPECIALIZATION`, `TITHE_GRADE_POPULATION_THRESHOLDS`, `TITHE_GRADE_QUOTA`, `TITHE_CYCLE_STEPS`, `TITHE_SHORTFALL_CHARGE_THRESHOLD`, `SURVEY_DISTANCE_RANGE_STEPS` |
 
 ## Planned next
 
@@ -48,6 +51,7 @@ section — this table is just the fast lookup.
 | Lab specialization | `lab-specialization.md` |
 | Shipyard slot expansion | `shipyard.md` |
 | Ship design (MK progression) | `ship-design.md` |
+| Tithe System | `tithe-system.md` |
 | Salvage | `salvage.md` |
 | Hive cities, nomadic fleets, Dyson projects | `megastructures.md` |
 

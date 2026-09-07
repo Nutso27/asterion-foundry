@@ -36,9 +36,60 @@ Directorate acts, not whether the accused "did it."
 
 - No random trial/verdict resolution — `charge()` returns the article's typical sentence, it does not simulate a contested hearing.
 - No appeals process.
-- No tie-in yet to the labor economy (Toil/Penal Legion assignees are not
-  wired into `src/main.py`'s production numbers — a filed record does not
-  yet remove anyone from, or add anyone to, a workforce pool).
+
+## Labor-economy wiring (2026-09-05, "improve all systems" pass)
+
+Toil Legion and Penal Legion sentences used to be a filed record with no
+further consequence — flagged in this doc, before this pass, as a known
+gap ("no tie-in yet to the labor economy... a filed record does not yet
+remove anyone from, or add anyone to, a workforce pool"). Both tiers'
+own descriptions already say what kind of work they mean, so this wiring
+takes them at face value instead of inventing new meaning:
+
+- **Toil Legion** ("forced labor assignment") is assigned to Mars's forge
+  complex for a fixed term (`TOIL_LEGION_TERM_STEPS`, 10 steps): a steady
+  `TOIL_LEGION_REFINED_METAL_PER_CYCLE` (3.0) trickle into Mars's refined
+  metal every `advance` step while the sentence is being served.
+- **Penal Legion** ("forced military/hazard-duty assignment") is assigned
+  to garrison/defense duty for a shorter fixed term
+  (`PENAL_LEGION_TERM_STEPS`, 6 steps — more dangerous duty, shorter
+  term): `PENAL_LEGION_GARRISON_PER_CYCLE` (2.0) added every step to
+  `world["legion_penal_garrison_rating"]`, a Directorate-wide (not
+  per-colony) number reported by Marshal-General's Council entry
+  alongside `fortress_world`'s colony-level `garrison_rating` — see
+  `docs/systems/council-seats.md` for why that stat exists at all.
+  Directorate-wide rather than per-colony because a sentenced individual
+  isn't tied to any one colony the way a fortress world is.
+
+`_file_charge()` now files a Toil/Penal Legion sentence with
+`status: "serving"` and a `term_remaining` counter instead of the generic
+`"sentenced"` every other non-capital tier still gets. `update_penal_labor()`
+(called every step from `advance_world()`, right after `update_mars()`)
+applies the effect and decrements the term for every `"serving"` record,
+flipping it to `"term_served"` — a real end state, not a silent stop —
+the step its term reaches zero. `docket` shows the remaining term on any
+sentence still serving.
+
+### Hardening added 2026-09-05 (stress-test pass)
+
+`update_penal_labor()` used to do a bare `record["term_remaining"] -= 1`.
+Normal play can't produce a `"serving"` record without `term_remaining`
+(`_file_charge()` always sets both in the same assignment), but a
+hand-edited or partially-written save file could -- and that raised an
+uncaught `KeyError` on the very next `advance`, crashing the program right
+after `load_game()` had reported "full state restored." Fixed with
+`.get("term_remaining", 0)` (treats a malformed record as already served
+rather than crashing) plus a matching load-time backfill in
+`_apply_loaded_save()`, the same defensive pattern this codebase already
+applies to every other historical save-compatibility gap.
+
+This still isn't a "workforce pool": there's no mechanic today that
+removes the sentenced person from anywhere else (a colony's population,
+a lab's staff) to begin serving, since the game doesn't track named
+individuals as assignable labor anywhere. It gives the sentence a real
+economic/military effect for its term, which is what was actually
+missing; a full labor-pool system (drafting a specific person away from
+a specific job) is a larger, separate feature this doesn't attempt.
 
 ## Integration into the game loop
 
@@ -65,6 +116,8 @@ Directorate acts, not whether the accused "did it."
 | Filing a charge | `charge` command → `handle_charge()` in `src/main.py` |
 | Confirming/carrying out a capital sentence | `confirm_servitor` command → `handle_confirm_servitor()` in `src/main.py` |
 | Viewing articles + filed records | `docket` command → `show_docket()` in `src/main.py` |
+| Applying one step of Toil/Penal Legion labor, per serving record | `update_penal_labor()` in `src/main.py`, called from `advance_world()` |
+| Directorate-wide Penal Legion garrison contribution | `world["legion_penal_garrison_rating"]`, reported by `marshal_general` in `show_council()` |
 
 ## Success condition
 
@@ -74,12 +127,18 @@ Directorate acts, not whether the accused "did it."
   silently succeeding.
 - A fully confirmed Servitor Conversion sentence succeeds and is reported as
   irreversible.
+- A Toil/Penal Legion sentence applies its effect every step for exactly
+  its fixed term, then stops for good — see "Labor-economy wiring" above.
 
 ## Dependencies
 
-None yet beyond the game loop itself. Future integration point: a labor
-assignment system that actually consumes Toil/Penal Legion sentences as a
-workforce pool.
+Feeds Mars's refined-metal stockpile (Toil Legion) and
+`world["legion_penal_garrison_rating"]` (Penal Legion), which
+Marshal-General's Council entry reads (`docs/systems/council-seats.md`).
+Future integration point, still open: a full labor-pool system that
+actually moves a specific named person out of a specific job (a colony's
+population, a lab's staff) to begin serving, rather than a sentence
+existing independently of wherever that person previously was.
 
 ## How to customize
 
