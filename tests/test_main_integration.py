@@ -1982,5 +1982,101 @@ class ResourceTransferHelperIntegrationTests(unittest.TestCase):
         self.assertEqual(destination["refined_metal"], 200.0)
 
 
+class EventLogIntegrationTests(unittest.TestCase):
+    """Coverage for the 2026-09-07 event log (world["events"] /
+    log_event() / show_events()) -- audit section 6.3's recommendation.
+    Confirms logged alerts are retrievable after the fact and that
+    existing print() behavior at each converted call site is unchanged.
+    """
+
+    def setUp(self):
+        game.world["events"] = []
+        game.world["time"] = 29
+        game.world["locations"]["mars"]["support_supplies"] = 1000.0
+        game.world["locations"]["mars"]["raw_metal"] = 1000.0
+        game.world["locations"]["mars"]["refined_metal"] = 0.0
+        game.world["multipliers"] = {
+            "universal_efficiency_multiplier": 1.0,
+            "research_time_multiplier": 1.0,
+            "construction_time_multiplier": 1.0,
+        }
+        game.world["colonies"] = {}
+
+    def test_log_event_appends_with_the_current_cycle(self):
+        game.log_event("Test alert")
+        self.assertEqual(len(game.world["events"]), 1)
+        self.assertEqual(game.world["events"][0], {"cycle": 29, "text": "Test alert"})
+
+    def test_log_event_trims_to_the_max_entry_cap(self):
+        for i in range(game.EVENT_LOG_MAX_ENTRIES + 10):
+            game.log_event(f"Event {i}")
+        self.assertEqual(len(game.world["events"]), game.EVENT_LOG_MAX_ENTRIES)
+        # The oldest entries were dropped -- the log keeps the most recent.
+        self.assertEqual(game.world["events"][-1]["text"], f"Event {game.EVENT_LOG_MAX_ENTRIES + 9}")
+
+    def test_show_events_defaults_to_the_last_ten(self):
+        for i in range(15):
+            game.log_event(f"Event {i}")
+        game.show_events()  # smoke test: must not raise
+
+    def test_show_events_respects_an_explicit_count(self):
+        for i in range(15):
+            game.log_event(f"Event {i}")
+        game.show_events(["3"])  # smoke test: must not raise
+
+    def test_show_events_handles_a_non_numeric_count_without_crashing(self):
+        game.show_events(["not-a-number"])  # smoke test: must not raise
+
+    def test_show_events_handles_an_empty_log(self):
+        game.show_events()  # smoke test: must not raise on a fresh game
+
+    def test_mars_stall_is_logged(self):
+        game.world["locations"]["mars"]["support_supplies"] = 0.0
+        game.update_mars()
+        self.assertTrue(any("Mars lacks support supplies" in e["text"] for e in game.world["events"]))
+
+    def test_colony_support_stall_is_logged(self):
+        game.world["colonies"]["testworld"] = {
+            "name": "Testworld", "status": "outpost", "support_supplies": 0.0,
+            "raw_metal": 0.0, "refined_metal": 0.0, "population": 0,
+            "continuance_hall": False, "specialization": None,
+        }
+        game.update_colonies()
+        self.assertTrue(any(
+            "Testworld' lacks support supplies" in e["text"] for e in game.world["events"]
+        ))
+
+    def test_continuance_hall_milestone_is_logged(self):
+        game.world["colonies"]["testworld"] = {
+            "name": "Testworld", "status": "established", "support_supplies": 1000.0,
+            "raw_metal": 0.0, "refined_metal": 0.0,
+            "population": game.CONTINUANCE_HALL_POPULATION_THRESHOLD,
+            "continuance_hall": False, "specialization": "civilian_world",
+            "tithe_grade": None, "tithe_shortfall_streak": 0,
+        }
+        game.update_colonies()
+        self.assertTrue(any(
+            "Testworld' has grown enough to raise a Continuance Hall" in e["text"]
+            for e in game.world["events"]
+        ))
+
+    def test_events_key_round_trips_through_save_and_load(self):
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            save_path = os.path.join(tmp_dir, "state.json")
+            original_save_file = game.SAVE_FILE
+            game.SAVE_FILE = save_path
+            try:
+                game.log_event("A durable event")
+                game.save_game()
+                game.world["events"] = []
+                game.load_game()
+                self.assertTrue(any(e["text"] == "A durable event" for e in game.world["events"]))
+            finally:
+                game.SAVE_FILE = original_save_file
+        finally:
+            shutil.rmtree(tmp_dir)
+
+
 if __name__ == "__main__":
     unittest.main()

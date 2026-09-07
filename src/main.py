@@ -123,6 +123,9 @@ FREIGHTER_METAL_PICKUP_RESERVE = 60.0
 # a single trip even with production running.
 EARTH_SUPPORT_SUPPLIES_PRODUCTION_PER_STEP = 15.0
 EARTH_SUPPORT_SUPPLIES_RESERVE = 500.0
+# How many entries world["events"] keeps before the oldest are dropped --
+# see world["events"]'s own init comment for why this log exists.
+EVENT_LOG_MAX_ENTRIES = 200
 # Fleet caps: once a class hits this many in-service hulls, the shipyard
 # stops building more of that class (locked slots for a capped class
 # simply idle rather than force a build). Existing hulls above this
@@ -691,6 +694,17 @@ def build_ship_and_facility_state():
     # raw_metal, steps_remaining}, ...]. Advanced every step in
     # update_tithe_convoys(), independent of the tithe cycle itself.
     world["tithe_convoys"] = []
+    # Added 2026-09-07 (audit section 6.3's recommendation): a persistent
+    # log of events worth noticing, distinct from the constant stream of
+    # routine print() output every update_*() function already produces.
+    # Without this, an alert (Mars stalling, a concealment caught, a
+    # colony running short) only ever existed as one line scrolling past
+    # in the terminal -- gone for good if you weren't watching right when
+    # it printed. log_event() appends here AND prints, so nothing about
+    # existing output changes; `events` just gives a way to look back.
+    # Capped at EVENT_LOG_MAX_ENTRIES so a very long playthrough doesn't
+    # grow this without bound.
+    world["events"] = []
     # Cycle-29 sync (Lesson 05): the compendium says Labs #2-#6 are already
     # built and operational; Lab #7 is still under construction, so it's
     # deliberately NOT added here — build_lab (in-game command) adds it later.
@@ -801,7 +815,7 @@ def update_mars():
             f"extracted 15 raw metal, and refined 10 raw metal into {refined_gain} refined metal."
         )
     else:
-        print("ALERT: Mars lacks support supplies. Forge complexes are idle; extraction and refining have stopped.")
+        log_event("ALERT: Mars lacks support supplies. Forge complexes are idle; extraction and refining have stopped.")
 
 def seed_completed_research():
     """Fast-forward the Collegium to its cycle-29 research state, using
@@ -844,6 +858,43 @@ def update_earth():
         f"{EARTH_SUPPORT_SUPPLIES_PRODUCTION_PER_STEP:.0f} support supplies this step "
         f"(reserves: {earth['support_supplies']:.0f})."
     )
+
+
+def log_event(text):
+    """Print `text` (unchanged behavior) and also append it to
+    world["events"] as {cycle, text}, trimming to EVENT_LOG_MAX_ENTRIES.
+    See world["events"]'s own init comment for why this exists. Call
+    this instead of a bare print() for anything a player could
+    reasonably want to look back at later -- a stall, a concealment
+    caught, a milestone reached -- not for routine per-step flavor text
+    (a normal freighter run, a normal tithe payment) that's expected and
+    frequent enough that logging every instance would just be noise.
+    """
+    world["events"].append({"cycle": world["time"], "text": text})
+    if len(world["events"]) > EVENT_LOG_MAX_ENTRIES:
+        world["events"] = world["events"][-EVENT_LOG_MAX_ENTRIES:]
+    print(text)
+
+
+def show_events(args=None):
+    """Print the most recent logged events, newest last. Defaults to the
+    last 10; `events <n>` shows the last n instead.
+    """
+    count = 10
+    if args:
+        try:
+            count = int(args[0])
+        except ValueError:
+            print(f"Usage: events [count]. '{args[0]}' isn't a number.")
+            return
+
+    recent = world["events"][-count:]
+    print(f"\n=== EVENTS (last {len(recent)} of {len(world['events'])}) ===")
+    if not recent:
+        print("  No events logged yet.")
+        return
+    for entry in recent:
+        print(f"  Cycle {entry['cycle']}: {entry['text']}")
 
 
 def withdraw_above_reserve(location, resource, reserve, capacity):
@@ -1964,14 +2015,14 @@ def handle_audit(args):
             "kind": concealment["kind"], "outcome": "corrected, no charge (Halvorsen precedent)",
         }
         if concealment["kind"] == "silent_drain":
-            print(
+            log_event(
                 f"Bureau audit of {target}: CONCEALMENT DISCOVERED. "
                 f"{concealment['total_concealed']:.0f} support supplies silently diverted over "
                 f"{cycles} cycle(s), unreported since cycle {concealment['started_cycle']}."
             )
             log_entry["total_concealed"] = concealment["total_concealed"]
         else:
-            print(
+            log_event(
                 f"Bureau audit of {concealment['colony_name']}: SHORTFALL EXPLAINED. "
                 f"{concealment['total_shortfall']:.1f} in unmet tithe over "
                 f"{concealment['cycles_short']} cycle(s) corrected, not concealed."
@@ -2105,6 +2156,7 @@ def save_game():
         "colonies": world["colonies"],
         "tithe_system": world["tithe_system"],
         "tithe_convoys": world["tithe_convoys"],
+        "events": world["events"],
         "ship_classes": {cid: asdict(sc) for cid, sc in world["ship_classes"].items()},
         "ship_class_stats": world["ship_class_stats"],
         "shipyard": asdict(world["shipyard"]),
@@ -2289,7 +2341,7 @@ def _apply_loaded_save(saved):
 
     for key in ["time", "locations", "ships", "xenos_fragments", "multipliers",
                 "council", "standing_orders", "equipment_status", "directorate_code",
-                "audit_system", "colonies", "tithe_system", "tithe_convoys",
+                "audit_system", "colonies", "tithe_system", "tithe_convoys", "events",
                 "ship_class_stats", "shipyard_slots", "lab_roles",
                 "legion_penal_garrison_rating"]:
         if key in saved:
@@ -2605,7 +2657,7 @@ def update_colonies():
             if colony["support_supplies"] >= COLONY_SUPPORT_CONSUMPTION:
                 colony["support_supplies"] -= COLONY_SUPPORT_CONSUMPTION
             else:
-                print(f"ALERT: '{colony['name']}' lacks support supplies. Growth and output stalled.")
+                log_event(f"ALERT: '{colony['name']}' lacks support supplies. Growth and output stalled.")
                 continue
 
         # Council-seat wiring (2026-09-05): a colony raises its Continuance
@@ -2618,7 +2670,7 @@ def update_colonies():
         # future change lets population grow some other way.
         if not colony["continuance_hall"] and colony["population"] >= CONTINUANCE_HALL_POPULATION_THRESHOLD:
             colony["continuance_hall"] = True
-            print(f"'{colony['name']}' has grown enough to raise a Continuance Hall.")
+            log_event(f"'{colony['name']}' has grown enough to raise a Continuance Hall.")
 
         if colony["status"] == "established":
             effects = SPECIALIZATION_EFFECTS[colony["specialization"]]
@@ -2720,7 +2772,7 @@ def _escalate_tithe_shortfall(colony_id, colony):
         c for c in world["audit_system"]["active_concealments"]
         if not (c["kind"] == "tithe_shortfall" and c["colony_id"] == colony_id)
     ]
-    print(f"Chancellery escalation: '{colony['name']}''s persistent shortfall referred for formal charges.")
+    log_event(f"Chancellery escalation: '{colony['name']}''s persistent shortfall referred for formal charges.")
 
 
 def update_tithes():
@@ -2909,6 +2961,7 @@ def show_help():
     print("  audit                         - Show the Bureau audit log and doctrine")
     print("  council                       - Show the Directorate Council, Branches A-K, and the Vigil")
     print("  orders                        - Show Standing Orders and current equipment status")
+    print("  events [count]                - Show the last [count] (default 10) logged events")
     print("  study_fragments               - Spend 3 xenos fragments on a Collegium analysis pass")
     print("  survey <name>                 - Survey a new colony target")
     print("  outpost <colony_id>           - Establish an outpost at a surveyed colony")
@@ -2974,6 +3027,8 @@ def main():
             show_council()
         elif command == "orders":
             show_standing_orders()
+        elif command == "events":
+            show_events(args)
         elif command == "study_fragments":
             handle_study_fragments()
         elif command == "survey":
